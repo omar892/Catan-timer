@@ -127,6 +127,24 @@ summary{cursor:pointer;font-weight:600;padding:8px 0;color:var(--accent)}
 .hbar b{position:absolute;left:0;right:0;height:0;border-top:2px dashed var(--muted);opacity:.7}
 .hlab{font-size:12px;color:var(--muted);padding-top:6px;font-variant-numeric:tabular-nums}
 .hlab.seven{color:var(--text);font-weight:700}
+/* Roll reveal + badge */
+.reveal{position:fixed;inset:0;z-index:60;background:rgba(10,12,16,.94);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;
+  padding:20px;cursor:pointer;animation:fadein .15s ease-out}
+.reveal .dice{gap:24px}
+.reveal .die{width:88px;height:88px;border-radius:18px;padding:11px}
+.reveal .bignum{font-size:min(46vw,220px);font-weight:900;line-height:1;letter-spacing:-.04em;color:#fff;font-variant-numeric:tabular-nums;
+  text-shadow:0 8px 40px rgba(0,0,0,.6);animation:pop .35s cubic-bezier(.2,1.6,.4,1)}
+.reveal.seven .bignum{color:var(--danger)}
+.reveal .caption{font-size:20px;font-weight:700;color:#fff;text-align:center;text-wrap:balance}
+.reveal.seven .caption{color:#ffb3ab}
+.reveal .tap{font-size:12px;color:var(--muted);margin-top:14px}
+@keyframes pop{0%{transform:scale(.4);opacity:0}100%{transform:scale(1);opacity:1}}
+@keyframes fadein{from{opacity:0}to{opacity:1}}
+@media (prefers-reduced-motion:reduce){.reveal,.reveal .bignum{animation:none}}
+.rollbadge{display:inline-flex;align-items:center;gap:10px;margin:2px auto 6px;padding:6px 14px 6px 8px;border-radius:999px;background:rgba(0,0,0,.28)}
+.rollbadge .dice{gap:6px;padding:0}
+.rollbadge .num{font-size:36px;font-weight:900;line-height:1;font-variant-numeric:tabular-nums}
+.rollbadge .lbl{font-size:11px;text-transform:uppercase;letter-spacing:.08em;opacity:.8}
 .awards{display:grid;gap:12px}
 .award{display:grid;grid-template-columns:44px 1fr;gap:10px;align-items:center}
 .award .icon{font-size:30px;text-align:center}
@@ -391,6 +409,7 @@ function tick(){
     } else if(rem <= T('warning')*1000 && !tm.warned){ tm.warned = true; SFX.warn(); }
   }
   updateClock();
+  if(reveal && t >= reveal.until){ reveal = null; render(); }
   if(t - (tick.lastSave||0) > 4000){ tick.lastSave = t; save(); }
 }
 
@@ -482,6 +501,8 @@ function randomDie(){
   return 1 + Math.floor(Math.random()*6);
 }
 let rollAnim = null;
+let reveal = null;   // {d1,d2,sum,until} — the big number shown right after the dice land
+const REVEAL_MS = 3000;
 function isRolling(){ return !!(state.turn && state.turn.roll && state.turn.roll.rolling); }
 function rollDice(){
   if(state.phase!=='turn' || state.turn.sub!=='preroll' || isRolling()) return;
@@ -505,7 +526,18 @@ function finishRoll(){
   p.stats.rolls++; p.stats.rollSum += sum; if(sum===7) p.stats.sevens++;
   state.rolls.push({p:state.turn.player, d1:r.d1, d2:r.d2});
   log(`${p.name} rolled ${r.d1}+${r.d2} = ${sum}`);
+  reveal = {d1:r.d1, d2:r.d2, sum, until: now()+REVEAL_MS};
+  if(sum===7) vibrate([200,80,200]);
   rolled(sum===7, true);
+}
+function renderReveal(){
+  if(!reveal) return '';
+  const seven = reveal.sum===7;
+  return `<div class="reveal ${seven?'seven':''}" data-act="dismissReveal">
+    <div class="dice">${diceHTML(reveal.d1, reveal.d2)}</div>
+    <div class="bignum">${reveal.sum}</div>
+    <div class="caption">${seven ? 'Robber! Discard then move the robber' : 'Collect resources'}</div>
+    <div class="tap">tap to dismiss</div></div>`;
 }
 const PIPS = {1:[4], 2:[2,6], 3:[2,4,6], 4:[0,2,6,8], 5:[0,2,4,6,8], 6:[0,2,3,5,6,8]};
 function dieHTML(n, cls=''){
@@ -623,7 +655,7 @@ function render(){
     case 'finished': html = renderFinished(); break;
     default: html = renderGame();
   }
-  app.innerHTML = html + renderOverlay();
+  app.innerHTML = html + renderOverlay() + renderReveal();
   updateClock();
 }
 
@@ -773,7 +805,7 @@ function renderGame(){
         <button data-act="knight" ${devLocked||rolling?'disabled':''} style="width:100%">⚔️ Play Knight before rolling<span class="sub">${devHint||'moves the robber first, then roll'}</span></button>
       </div>`;
     } else {
-      what = t.roll ? `Rolled ${t.roll.d1+t.roll.d2} · trade & build in any order` : 'Trade & build in any order';
+      what = 'Trade & build in any order';
       const btn = (id) => { const A = ACTIONS[id]; const dis = A.dev && devLocked; return `<button data-act="action" data-id="${id}" ${dis?'disabled':''}>${A.label}<span class="bonus">+${T(A.key)}s</span><span class="sub">${A.hint}</span></button>`; };
       actions = `<div class="actions">
         ${t.banner ? `<div class="banner alert" data-act="clearBanner">${esc(t.banner)} <span class="muted">(tap to dismiss)</span></div>`:''}
@@ -812,6 +844,8 @@ function renderGame(){
     <div class="clock" id="clock">${fmt(remainingMs())}</div>
     <div class="bar"><i id="bar"></i></div>
     <div class="meta"><span id="tlabel">${esc(state.timer.label)}</span><span id="tstatus"></span></div>
+    ${state.turn && state.turn.roll && !isRolling() && (state.phase==='turn' ? state.turn.sub==='main' : state.phase==='discard' || state.phase==='robber')
+      ? `<div class="rollbadge">${diceHTML(state.turn.roll.d1, state.turn.roll.d2, false, true)}<span class="num">${state.turn.roll.d1+state.turn.roll.d2}</span><span class="lbl">rolled</span></div>` : ''}
     <div id="float"></div>
   </div>
   ${actions}
@@ -969,6 +1003,7 @@ const NAV_ACTS = new Set(['start','plSettlement','plRoad','roll','discardDone','
 let lastNavAt = 0;
 document.addEventListener('click', e=>{
   const btn = e.target.closest('[data-act]'); if(!btn) return;
+  if(btn.dataset.act==='dismissReveal'){ reveal=null; render(); return; }
   unlockAudio();
   const act = btn.dataset.act; const s = state.settings;
   if(isRolling()) return;   // dice are in the air: nothing else may happen

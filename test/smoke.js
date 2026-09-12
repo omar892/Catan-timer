@@ -146,7 +146,11 @@ const assert = (c, m) => { if (!c) { console.error('FAIL:', m); process.exitCode
   s = await S();
   assert(s.turn.sub === 'main' && s.turn.roll.d1 + s.turn.roll.d2 === 6 && s.rolls.length === 1, 'roll of 6 routes to trade & build and is recorded');
   assert(s.players[0].stats.rolls === 1 && s.players[0].stats.rollSum === 6, 'roll stats attributed to roller');
-  assert((await page.textContent('#timer')).includes('Rolled 6'), 'timer card shows the roll');
+  assert(await page.isVisible('.reveal') && (await page.textContent('.reveal .bignum')) === '6', 'big number reveal after the dice land');
+  await page.screenshot({ path: __dirname + '/out/reveal.png' });
+  await page.click('.reveal');
+  assert(!(await page.isVisible('.reveal')), 'tap dismisses the reveal');
+  assert((await page.textContent('#timer .rollbadge .num')) === '6', 'timer card keeps a big roll badge');
   await page.screenshot({ path: __dirname + '/out/turn.png', fullPage: true });
   // Undo a roll
   await click('[data-act="undo"]');
@@ -158,6 +162,10 @@ const assert = (c, m) => { if (!c) { console.error('FAIL:', m); process.exitCode
   await page.waitForTimeout(1200);
   s = await S();
   assert(s.phase === 'discard' && s.players[0].stats.sevens === 1, 'roll of 7 goes to discard and counts a seven');
+  assert((await page.getAttribute('.reveal', 'class')).includes('seven'), 'seven reveal styled red');
+  await page.screenshot({ path: __dirname + '/out/reveal-seven.png' });
+  await page.waitForTimeout(3200);
+  assert(!(await page.isVisible('.reveal')), 'reveal auto-dismisses after 3s');
   await click('[data-act="discardDone"]'); await click('[data-act="robberDone"]');
   // Reload mid-roll finishes the roll
   await click('[data-act="endTurn"]'); await click('[data-act="sbDone"]');
