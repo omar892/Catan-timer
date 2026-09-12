@@ -1,0 +1,875 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<meta name="theme-color" content="#0f1115">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<link rel="manifest" href="manifest.json">
+<title>Catan Turn Timer</title>
+<style>
+:root{
+  --bg:#0f1115; --panel:#181c23; --panel2:#20252e; --line:#2c323d;
+  --text:#eef0f3; --muted:#9aa3b2; --accent:#e0a33c; --danger:#e04b3c; --ok:#3fb86a;
+  --radius:16px; --pad:16px;
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;padding:0;background:var(--bg);color:var(--text);
+  font:16px/1.4 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  -webkit-user-select:none;user-select:none;overscroll-behavior:none}
+body{padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left)}
+#app{max-width:640px;margin:0 auto;padding:12px var(--pad) 32px;min-height:100vh}
+h1{font-size:22px;margin:8px 0 4px}
+h2{font-size:17px;margin:18px 0 8px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em}
+p{margin:6px 0}
+.muted{color:var(--muted)}
+.small{font-size:13px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:14px;margin:10px 0}
+.row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.row>*{flex:1 1 auto}
+.grow{flex:1 1 auto}
+button{font:inherit;color:var(--text);background:var(--panel2);border:1px solid var(--line);border-radius:12px;
+  padding:12px 14px;cursor:pointer;font-weight:600;touch-action:manipulation;min-height:48px}
+button:active{transform:scale(.98);filter:brightness(1.15)}
+button:disabled{opacity:.35;pointer-events:none}
+button.primary{background:var(--accent);color:#161000;border-color:transparent}
+button.danger{background:var(--danger);color:#fff;border-color:transparent}
+button.ok{background:var(--ok);color:#06210f;border-color:transparent}
+button.ghost{background:transparent}
+button.big{font-size:19px;padding:16px;min-height:60px}
+button .sub{display:block;font-weight:400;font-size:12px;opacity:.8;margin-top:2px}
+button .bonus{display:inline-block;font-weight:700;font-size:12px;background:rgba(0,0,0,.25);padding:2px 7px;border-radius:999px;margin-left:6px}
+input[type=text],input[type=number],select{font:inherit;color:var(--text);background:var(--panel2);border:1px solid var(--line);
+  border-radius:10px;padding:10px 12px;width:100%;min-height:44px}
+input[type=number]{width:90px;text-align:right}
+label.opt{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 0;border-bottom:1px solid var(--line)}
+label.opt:last-child{border-bottom:none}
+input[type=checkbox]{width:22px;height:22px;accent-color:var(--accent)}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.grid .span2{grid-column:1/-1}
+@media (max-width:380px){.grid{grid-template-columns:1fr}}
+.chips{display:flex;gap:6px;flex-wrap:wrap}
+.chip{display:inline-flex;align-items:center;gap:6px;padding:6px 10px;border-radius:999px;font-size:13px;font-weight:600;border:2px solid transparent;white-space:nowrap}
+.chip.current{border-color:#fff;box-shadow:0 0 0 2px rgba(255,255,255,.15)}
+.chip .dot{width:10px;height:10px;border-radius:50%;background:currentColor;opacity:.9}
+.topbar{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:4px 0 8px}
+.topbar .info{font-size:13px;color:var(--muted)}
+.topbar button{min-height:40px;padding:8px 12px}
+/* Timer card */
+.timer{border-radius:22px;padding:18px 16px 14px;text-align:center;position:relative;overflow:hidden;
+  box-shadow:0 10px 40px rgba(0,0,0,.35);transition:background .3s}
+.timer .who{font-size:22px;font-weight:800;letter-spacing:.01em}
+.timer .what{font-size:14px;opacity:.85;margin-top:2px;min-height:20px}
+.timer .clock{font-size:76px;font-weight:800;font-variant-numeric:tabular-nums;line-height:1.05;margin:8px 0 4px;letter-spacing:-.02em}
+@media (max-width:360px){.timer .clock{font-size:64px}}
+.timer .bar{height:10px;background:rgba(0,0,0,.25);border-radius:999px;overflow:hidden;margin:6px 0 4px}
+.timer .bar>i{display:block;height:100%;background:rgba(255,255,255,.9);border-radius:999px;transition:width .25s linear}
+.timer .meta{font-size:12px;opacity:.8;display:flex;justify-content:space-between}
+.timer.warn{animation:pulse 1s infinite}
+.timer.over{background:var(--danger)!important;color:#fff!important;animation:flash .6s infinite}
+.timer.over .bar>i{background:#fff}
+.timer.paused{filter:grayscale(.7) brightness(.7)}
+@keyframes pulse{0%,100%{box-shadow:0 10px 40px rgba(0,0,0,.35)}50%{box-shadow:0 0 0 6px rgba(255,255,255,.35)}}
+@keyframes flash{0%,100%{filter:brightness(1)}50%{filter:brightness(1.25)}}
+.float{position:absolute;left:50%;top:38%;transform:translateX(-50%);font-size:34px;font-weight:900;
+  color:#fff;text-shadow:0 2px 8px rgba(0,0,0,.5);pointer-events:none;animation:rise 1.2s ease-out forwards}
+@keyframes rise{0%{opacity:0;transform:translate(-50%,10px)}20%{opacity:1}100%{opacity:0;transform:translate(-50%,-60px)}}
+.banner{background:var(--panel2);border:1px dashed var(--line);border-radius:12px;padding:10px 12px;margin:10px 0;font-size:14px}
+.banner.alert{border-color:var(--accent);color:#ffe2ad}
+.actions{margin-top:12px}
+.actions h3{font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;margin:14px 0 6px}
+.overlay{position:fixed;inset:0;background:rgba(0,0,0,.72);display:flex;align-items:center;justify-content:center;padding:20px;z-index:50}
+.overlay .card{width:100%;max-width:520px;max-height:90vh;overflow:auto}
+table{width:100%;border-collapse:collapse;font-size:14px}
+th,td{text-align:left;padding:8px 6px;border-bottom:1px solid var(--line);vertical-align:middle;white-space:nowrap}
+th{color:var(--muted);font-weight:600;font-size:12px;text-transform:uppercase;letter-spacing:.05em}
+td.num,th.num{text-align:right;font-variant-numeric:tabular-nums}
+.log{max-height:260px;overflow:auto;font-size:13px}
+.log div{padding:5px 0;border-bottom:1px solid var(--line)}
+.log time{color:var(--muted);margin-right:8px;font-variant-numeric:tabular-nums}
+.player-row{display:grid;grid-template-columns:28px 1fr 110px auto;gap:8px;align-items:center;margin:6px 0}
+.player-row .swatch{width:24px;height:24px;border-radius:6px;border:2px solid rgba(255,255,255,.25)}
+.player-row .mini{min-height:40px;padding:6px 10px}
+.preset{display:grid;grid-template-columns:repeat(4,1fr);gap:6px}
+@media (max-width:420px){.preset{grid-template-columns:repeat(2,1fr)}}
+.preset button{padding:10px 6px;font-size:14px}
+.preset button.sel{background:var(--accent);color:#161000;border-color:transparent}
+details{margin:10px 0}
+summary{cursor:pointer;font-weight:600;padding:8px 0;color:var(--accent)}
+.kbd{font-size:12px;color:var(--muted)}
+.footer-actions{position:sticky;bottom:0;background:linear-gradient(transparent,var(--bg) 30%);padding-top:14px;margin-top:10px}
+.stat-big{font-size:28px;font-weight:800}
+.hint{font-size:13px;color:var(--muted);margin-top:4px}
+.center{text-align:center}
+</style>
+</head>
+<body>
+<div id="app"></div>
+<script>
+'use strict';
+/* =====================================================================
+   Catan Turn Timer — an in-person, Colonist-style turn timer.
+   Everything lives in this one file so it works offline from a phone.
+   ===================================================================== */
+
+// ---------- Constants ----------
+const STORAGE_KEY = 'catan-timer-v1';
+const COLORS = [
+  {id:'red',    name:'Red',    hex:'#c9302c', fg:'#fff'},
+  {id:'blue',   name:'Blue',   hex:'#2456c2', fg:'#fff'},
+  {id:'orange', name:'Orange', hex:'#e4831c', fg:'#1a1000'},
+  {id:'white',  name:'White',  hex:'#e9e6df', fg:'#15171a'},
+  {id:'green',  name:'Green',  hex:'#2f8f4e', fg:'#fff'},
+  {id:'brown',  name:'Brown',  hex:'#7a4b2a', fg:'#fff'},
+];
+
+// Colonist presets (base turn, initial settlement, initial road), plus an
+// in-person scale factor "f" applied to every action bonus below.
+const PRESETS = {
+  blitz:  {label:'Blitz',  desc:'Colonist “Very fast”', turn:30,  settlement:60,  road:15, f:0.5},
+  fast:   {label:'Fast',   desc:'Colonist “Fast”',      turn:60,  settlement:120, road:30, f:0.75},
+  normal: {label:'Normal', desc:'Colonist “Normal”',    turn:120, settlement:180, road:45, f:1},
+  slow:   {label:'Slow',   desc:'Colonist “Slow”',      turn:240, settlement:360, road:90, f:1.5},
+};
+// Base (Normal-speed, in-person) values in seconds for everything else.
+const BASE_TIMES = {
+  playerTrade:30, bankTrade:10, buildRoad:10, buildSettlement:15, buildCity:15, devBuy:10,
+  roadBuilding:20, yearOfPlenty:10, monopoly:45, discard:45, robber:30, specialBuild:45,
+  extension:30, warning:15,
+};
+const TIME_LABELS = [
+  ['turn','Turn (base time)'],
+  ['settlement','Initial settlement placement'],
+  ['road','Initial road (added once settlement is down)'],
+  ['playerTrade','Trade with a player  (+)'],
+  ['bankTrade','Bank / harbor trade  (+)'],
+  ['buildRoad','Build a road  (+)'],
+  ['buildSettlement','Build a settlement  (+)'],
+  ['buildCity','Build a city  (+)'],
+  ['devBuy','Buy a development card  (+)'],
+  ['roadBuilding','Play Road Building  (+)'],
+  ['yearOfPlenty','Play Year of Plenty  (+)'],
+  ['monopoly','Play Monopoly  (+)'],
+  ['robber','Move robber & steal (Knight or a 7)'],
+  ['discard','Discard phase after a 7 (everyone)'],
+  ['specialBuild','Special building phase (5–6 players)'],
+  ['extension','“Extra time” button  (+)'],
+  ['warning','Warning sound when this much is left'],
+];
+
+function timesForPreset(key){
+  const p = PRESETS[key];
+  const t = {turn:p.turn, settlement:p.settlement, road:p.road};
+  for (const k in BASE_TIMES) t[k] = Math.max(5, Math.round(BASE_TIMES[k]*p.f/5)*5);
+  if (key==='blitz') t.warning = 10;
+  return t;
+}
+
+// ---------- State ----------
+let state = null;
+let lastTick = Date.now();
+let undoStack = [];
+let overlay = null;         // 'menu' | 'timings' | 'log' | 'rules' | 'winner' | null
+let floatMsg = null;
+
+function defaultSettings(){
+  return {
+    preset:'normal',
+    times: timesForPreset('normal'),
+    players:[
+      {name:'Player 1', color:'red'},
+      {name:'Player 2', color:'blue'},
+      {name:'Player 3', color:'orange'},
+      {name:'Player 4', color:'white'},
+    ],
+    extension:false,        // 5–6 player rules: special building phase
+    extensionsPerTurn:1,    // "extra time" presses allowed per turn
+    strictDev:true,         // one dev card per turn
+    discardLimit:7,         // more than this many cards → discard on a 7
+    sound:true, vibrate:true,
+  };
+}
+
+function freshState(){
+  return {
+    phase:'setup',          // setup | placement | turn | discard | robber | specialBuild | finished
+    paused:false,
+    settings: defaultSettings(),
+    players:[], placement:null, turn:null, timer:null, robber:null,
+    turnNumber:0, roundNumber:0,
+    clock:{elapsedMs:0},
+    log:[], winner:null, gameStartedAt:null,
+  };
+}
+
+function save(){
+  try{ localStorage.setItem(STORAGE_KEY, JSON.stringify({state, savedAt:Date.now()})); }catch(e){}
+}
+function load(){
+  try{
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if(!raw) return null;
+    const {state:s, savedAt} = JSON.parse(raw);
+    if(!s || !s.settings) return null;
+    // Freeze the timer where it was when the page was left.
+    if(s.timer && !s.paused && s.phase!=='setup' && s.phase!=='finished'){
+      s.timer.pausedRemaining = s.timer.endAt - savedAt;
+      s.paused = true;
+    }
+    return s;
+  }catch(e){ return null; }
+}
+
+// ---------- Helpers ----------
+const $ = sel => document.querySelector(sel);
+const now = () => Date.now();
+const esc = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const colorOf = id => COLORS.find(c=>c.id===id) || COLORS[0];
+function fmt(ms){
+  const neg = ms<0; ms = Math.abs(ms);
+  const s = Math.floor(ms/1000);
+  const m = Math.floor(s/60), r = s%60;
+  return (neg?'-':'') + m + ':' + String(r).padStart(2,'0');
+}
+function fmtLong(ms){
+  const s = Math.round(ms/1000);
+  const h = Math.floor(s/3600), m = Math.floor((s%3600)/60), r = s%60;
+  return h ? `${h}h ${m}m` : `${m}m ${String(r).padStart(2,'0')}s`;
+}
+function fmtS(sec){ return sec>=60 ? (sec%60? `${Math.floor(sec/60)}m ${sec%60}s` : `${sec/60}m`) : `${sec}s`; }
+function T(key){ return state.settings.times[key]; }
+function player(i){ return state.players[i]; }
+function log(text){
+  state.log.unshift({t:state.clock.elapsedMs, text});
+  if(state.log.length>80) state.log.length = 80;
+}
+
+// ---------- Audio / haptics / wake lock ----------
+let audioCtx = null;
+function unlockAudio(){
+  if(!audioCtx){ try{ audioCtx = new (window.AudioContext||window.webkitAudioContext)(); }catch(e){} }
+  if(audioCtx && audioCtx.state==='suspended') audioCtx.resume().catch(()=>{});
+}
+function beep(freq, dur, when=0, type='square', gain=0.25){
+  if(!state.settings.sound || !audioCtx) return;
+  try{
+    const o = audioCtx.createOscillator(), g = audioCtx.createGain();
+    o.type = type; o.frequency.value = freq;
+    g.gain.setValueAtTime(0.0001, audioCtx.currentTime+when);
+    g.gain.exponentialRampToValueAtTime(gain, audioCtx.currentTime+when+0.01);
+    g.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime+when+dur);
+    o.connect(g).connect(audioCtx.destination);
+    o.start(audioCtx.currentTime+when); o.stop(audioCtx.currentTime+when+dur+0.05);
+  }catch(e){}
+}
+function vibrate(pattern){ if(state.settings.vibrate && navigator.vibrate) try{ navigator.vibrate(pattern); }catch(e){} }
+const SFX = {
+  tap(){ beep(880,0.05,0,'sine',0.12); },
+  bonus(){ beep(660,0.08,0,'sine',0.18); beep(990,0.1,0.09,'sine',0.18); },
+  warn(){ beep(740,0.12); beep(740,0.12,0.2); vibrate([80,60,80]); },
+  expired(){ for(let i=0;i<4;i++) beep(i%2?520:420,0.25,i*0.3); vibrate([250,120,250,120,400]); },
+  over(){ beep(420,0.15); vibrate(120); },
+  next(){ beep(523,0.09,0,'triangle',0.2); beep(659,0.09,0.1,'triangle',0.2); beep(784,0.14,0.2,'triangle',0.2); },
+};
+let wakeLock = null;
+async function keepAwake(){
+  try{ if('wakeLock' in navigator && !wakeLock){ wakeLock = await navigator.wakeLock.request('screen'); wakeLock.addEventListener('release',()=>{wakeLock=null;}); } }catch(e){}
+}
+document.addEventListener('visibilitychange', ()=>{ if(document.visibilityState==='visible' && state && state.phase!=='setup') keepAwake(); });
+
+// ---------- Timer core ----------
+function setTimer(seconds, label){
+  state.timer = {
+    total:seconds, label,
+    endAt: now()+seconds*1000,
+    pausedRemaining: state.paused ? seconds*1000 : null,
+    warned:false, expired:false, nextOverBeepMs:0,
+  };
+}
+function remainingMs(){
+  if(!state.timer) return 0;
+  return state.paused ? state.timer.pausedRemaining : state.timer.endAt - now();
+}
+function addTime(seconds, reason){
+  if(!state.timer) return;
+  state.timer.total += seconds;
+  if(state.paused) state.timer.pausedRemaining += seconds*1000;
+  else state.timer.endAt += seconds*1000;
+  const rem = remainingMs();
+  if(rem > T('warning')*1000){ state.timer.warned=false; state.timer.expired=false; }
+  else if(rem > 0){ state.timer.expired=false; }
+  floatMsg = {text:`+${seconds}s`, at:now()};
+  SFX.bonus();
+  if(reason) log(`${actorName()}: ${reason} (+${seconds}s)`);
+}
+function pause(){
+  if(state.paused || !state.timer) return;
+  state.timer.pausedRemaining = state.timer.endAt - now();
+  state.paused = true; log('Paused');
+}
+function resume(){
+  if(!state.paused) return;
+  if(state.timer) state.timer.endAt = now() + state.timer.pausedRemaining;
+  state.paused = false; lastTick = now(); log('Resumed');
+}
+function togglePause(){ state.paused ? resume() : pause(); }
+
+// Who is "on the clock" for stats attribution.
+function actorIndex(){
+  switch(state.phase){
+    case 'placement': return state.placement.order[state.placement.idx];
+    case 'turn': case 'robber': return state.turn.player;
+    default: return null;   // discard & special build: everyone at once
+  }
+}
+function actorName(){ const i = actorIndex(); return i==null ? 'Table' : player(i).name; }
+
+function tick(){
+  const t = now();
+  const dt = Math.min(t - lastTick, 5000);   // clamp long gaps (tab was asleep)
+  lastTick = t;
+  if(state && state.timer && !state.paused && state.phase!=='setup' && state.phase!=='finished'){
+    state.clock.elapsedMs += dt;
+    const a = actorIndex();
+    if(a!=null){ player(a).stats.timeUsed += dt; }
+    if(state.turn && (state.phase==='turn'||state.phase==='robber'||state.phase==='discard')) state.turn.elapsedMs += dt;
+    const rem = state.timer.endAt - t;
+    const tm = state.timer;
+    if(rem<=0){
+      if(a!=null) player(a).stats.overtimeMs += dt;
+      if(state.turn && state.phase!=='specialBuild') state.turn.overtimeMs += dt;
+      if(!tm.expired){
+        tm.expired = true; SFX.expired();
+        if(a!=null && state.turn && state.phase!=='placement' && !state.turn.wentOver){ state.turn.wentOver=true; player(a).stats.overtimeTurns++; }
+        log(`${actorName()} ran out of time (${tm.label})`);
+        tm.nextOverBeepMs = 15000;
+      } else if(-rem >= tm.nextOverBeepMs){ SFX.over(); tm.nextOverBeepMs += 15000; }
+    } else if(rem <= T('warning')*1000 && !tm.warned){ tm.warned = true; SFX.warn(); }
+  }
+  updateClock();
+  if(t - (tick.lastSave||0) > 4000){ tick.lastSave = t; save(); }
+}
+
+// ---------- Game flow ----------
+function snapshot(){ undoStack.push(JSON.stringify(state)); if(undoStack.length>15) undoStack.shift(); }
+function undo(){
+  const s = undoStack.pop(); if(!s) return;
+  const wasPaused = state.paused;
+  state = JSON.parse(s);
+  if(wasPaused && !state.paused){ state.paused=true; state.timer.pausedRemaining = state.timer.endAt-now(); }
+  log('Undid last action');
+  commit();
+}
+function commit(){ save(); render(); }
+
+function startGame(){
+  const s = state.settings;
+  state.players = s.players.map((p,i)=>({
+    id:i, name:p.name.trim()||`Player ${i+1}`, color:p.color,
+    stats:{turns:0, timeUsed:0, overtimeMs:0, overtimeTurns:0, longestTurnMs:0, extensionsUsed:0},
+  }));
+  const n = state.players.length;
+  const order = [...Array(n).keys()].concat([...Array(n).keys()].reverse());
+  state.placement = {order, idx:0, step:'settlement'};
+  state.phase = 'placement'; state.paused=false; state.clock.elapsedMs=0; state.log=[]; state.turnNumber=0; state.roundNumber=0;
+  state.gameStartedAt = now(); undoStack = [];
+  setTimer(T('settlement'), 'Initial settlement');
+  log('Game started: initial placement');
+  keepAwake(); SFX.next(); commit();
+}
+
+function placementSettlementDown(){
+  snapshot();
+  state.placement.step='road';
+  addTime(T('road'), 'settlement placed, now the road');
+  state.timer.label = 'Initial road';
+  commit();
+}
+function placementRoadDown(){
+  snapshot();
+  const pl = state.placement;
+  pl.idx++;
+  if(pl.idx >= pl.order.length){
+    log('Initial placement complete — 2nd settlements collect their starting resources');
+    beginTurn(0, true);
+  } else {
+    pl.step='settlement';
+    const second = pl.idx >= state.players.length;
+    setTimer(T('settlement'), second ? '2nd settlement' : 'Initial settlement');
+    SFX.next(); commit();
+  }
+}
+
+function beginTurn(pIdx, first=false){
+  state.turnNumber++;
+  if(pIdx===0) state.roundNumber++;
+  state.turn = {player:pIdx, sub:'preroll', rolled:false, devPlayed:false, extensionsUsed:0, elapsedMs:0, overtimeMs:0, wentOver:false, actions:0};
+  state.phase='turn';
+  setTimer(T('turn'), 'Turn');
+  log(`Turn ${state.turnNumber}: ${player(pIdx).name}`);
+  if(!first) SFX.next();
+  commit();
+}
+
+function rolled(seven){
+  snapshot();
+  state.turn.rolled=true;
+  if(seven){
+    log(`${actorName()} rolled a 7`);
+    // Everyone with too many cards discards; the turn timer is frozen meanwhile.
+    state.turn.savedRemaining = remainingMs(); state.turn.savedTotal = state.timer.total;
+    state.phase='discard';
+    setTimer(T('discard'), 'Discard (everyone)');
+    vibrate([60,40,60]);
+  } else {
+    log(`${actorName()} rolled — collect resources`);
+    state.turn.sub='main';
+  }
+  commit();
+}
+function discardDone(){
+  snapshot();
+  log('Discards done');
+  enterRobber('main');
+  commit();
+}
+function enterRobber(returnTo){
+  state.robber = {returnTo};
+  state.phase='robber';
+  if(state.turn.savedRemaining==null){ state.turn.savedRemaining = remainingMs(); state.turn.savedTotal = state.timer.total; }
+  setTimer(T('robber'), 'Move robber & steal');
+}
+function robberDone(){
+  snapshot();
+  log(`${actorName()} moved the robber`);
+  state.phase='turn';
+  state.turn.sub = state.robber.returnTo;
+  const rem = Math.max(state.turn.savedRemaining ?? 0, 0);
+  const total = state.turn.savedTotal || T('turn');
+  state.turn.savedRemaining = null; state.turn.savedTotal = null;
+  state.robber=null;
+  // Restore the turn timer where it was; the robber had its own clock.
+  setTimer(rem/1000, 'Turn'); state.timer.total = total;
+  commit();
+}
+
+const ACTIONS = {
+  playerTrade:    {label:'Trade with player', hint:'only the active player may trade', key:'playerTrade'},
+  bankTrade:      {label:'Bank / harbor trade', hint:'4:1, 3:1 or 2:1', key:'bankTrade'},
+  buildRoad:      {label:'Build road', hint:'brick + lumber', key:'buildRoad'},
+  buildSettlement:{label:'Build settlement', hint:'brick + lumber + wool + grain', key:'buildSettlement'},
+  buildCity:      {label:'Build city', hint:'3 ore + 2 grain', key:'buildCity'},
+  devBuy:         {label:'Buy dev card', hint:'ore + wool + grain', key:'devBuy'},
+  roadBuilding:   {label:'Road Building', hint:'place 2 free roads', key:'roadBuilding', dev:true},
+  yearOfPlenty:   {label:'Year of Plenty', hint:'take any 2 resources', key:'yearOfPlenty', dev:true},
+  monopoly:       {label:'Monopoly', hint:'everyone hands over that resource', key:'monopoly', dev:true},
+};
+function doAction(id){
+  const a = ACTIONS[id]; if(!a) return;
+  snapshot();
+  state.turn.actions++;
+  if(a.dev){ state.turn.devPlayed = true; }
+  addTime(T(a.key), a.label);
+  if(id==='monopoly') state.turn.banner = 'MONOPOLY — every other player counts and hands over ALL of the named resource.';
+  commit();
+}
+function playKnight(){
+  snapshot();
+  state.turn.devPlayed = true;
+  state.turn.actions++;
+  log(`${actorName()} played a Knight`);
+  enterRobber(state.turn.sub);
+  commit();
+}
+function revealVP(){ snapshot(); state.turn.actions++; log(`${actorName()} revealed a Victory Point card`); commit(); }
+function extraTime(){
+  const s = state.settings;
+  if(state.turn.extensionsUsed >= s.extensionsPerTurn) return;
+  snapshot();
+  state.turn.extensionsUsed++; player(state.turn.player).stats.extensionsUsed++;
+  addTime(T('extension'), 'extra time');
+  commit();
+}
+function clearBanner(){ state.turn.banner=null; commit(); }
+
+function endTurn(){
+  snapshot();
+  const p = player(state.turn.player), t = state.turn;
+  p.stats.turns++;
+  p.stats.longestTurnMs = Math.max(p.stats.longestTurnMs, t.elapsedMs);
+  log(`${p.name} ended turn (${fmt(t.elapsedMs)}${t.overtimeMs>0?`, ${fmt(t.overtimeMs)} over`:''})`);
+  const next = (t.player+1) % state.players.length;
+  if(state.settings.extension && state.players.length>=5){
+    state.phase='specialBuild';
+    state.turn.nextPlayer = next;
+    setTimer(T('specialBuild'), 'Special building phase');
+    SFX.next(); commit();
+  } else beginTurn(next);
+}
+function specialBuildDone(){
+  snapshot();
+  log('Special building phase done');
+  beginTurn(state.turn.nextPlayer);
+}
+function finishGame(winnerIdx){
+  if(state.turn && state.phase==='turn'){
+    const p = player(state.turn.player); p.stats.turns++;
+    p.stats.longestTurnMs = Math.max(p.stats.longestTurnMs, state.turn.elapsedMs);
+  }
+  state.winner = winnerIdx; state.phase='finished'; state.paused=false;
+  log(winnerIdx==null ? 'Game ended' : `${player(winnerIdx).name} wins!`);
+  overlay=null; commit();
+}
+function resetToSetup(){
+  const settings = state.settings;
+  state = freshState(); state.settings = settings; undoStack=[]; overlay=null; commit();
+}
+
+// ---------- Rendering ----------
+function render(){
+  const app = $('#app');
+  let html;
+  switch(state.phase){
+    case 'setup': html = renderSetup(); break;
+    case 'finished': html = renderFinished(); break;
+    default: html = renderGame();
+  }
+  app.innerHTML = html + renderOverlay();
+  updateClock();
+}
+
+function renderSetup(){
+  const s = state.settings;
+  const rows = s.players.map((p,i)=>{
+    const c = colorOf(p.color);
+    return `<div class="player-row">
+      <div class="swatch" style="background:${c.hex}"></div>
+      <input type="text" data-player-name="${i}" value="${esc(p.name)}" maxlength="14" placeholder="Name">
+      <select data-player-color="${i}">${COLORS.map(cc=>`<option value="${cc.id}" ${cc.id===p.color?'selected':''}>${cc.name}</option>`).join('')}</select>
+      <div class="row" style="flex:0 0 auto;gap:4px">
+        <button class="mini ghost" data-act="playerUp" data-i="${i}" ${i===0?'disabled':''} aria-label="Move up">▲</button>
+        <button class="mini ghost" data-act="playerRemove" data-i="${i}" ${s.players.length<=2?'disabled':''} aria-label="Remove">✕</button>
+      </div></div>`;
+  }).join('');
+  const t = s.times;
+  return `
+  <h1>🎲 Catan Turn Timer</h1>
+  <p class="muted small">Colonist-style turn timer for the table. Each action adds time, exactly like online — tuned for physical cards, dice and pieces.</p>
+
+  <h2>Players (in seating order)</h2>
+  <div class="card">
+    ${rows}
+    <div class="row" style="margin-top:8px">
+      <button data-act="playerAdd" ${s.players.length>=6?'disabled':''}>+ Add player</button>
+      <button data-act="playerShuffle" class="ghost">🔀 Random start order</button>
+    </div>
+    <p class="hint">First player rolls first and places first; placement snakes back for the second settlement.</p>
+  </div>
+
+  <h2>Speed</h2>
+  <div class="card">
+    <div class="preset">
+      ${Object.entries(PRESETS).map(([k,p])=>`<button data-act="preset" data-k="${k}" class="${s.preset===k?'sel':''}">${p.label}<span class="sub">${fmtS(p.turn)} turns</span></button>`).join('')}
+      <button data-act="preset" data-k="custom" class="${s.preset==='custom'?'sel':''}">Custom<span class="sub">edit below</span></button>
+    </div>
+    <p class="hint" style="margin-top:10px">
+      Turn <b>${fmtS(t.turn)}</b> · initial settlement <b>${fmtS(t.settlement)}</b> + road <b>${fmtS(t.road)}</b> ·
+      player trade <b>+${t.playerTrade}s</b> · build <b>+${t.buildRoad}–${t.buildSettlement}s</b> · Monopoly <b>+${t.monopoly}s</b> ·
+      7 rolled: discard <b>${fmtS(t.discard)}</b> then robber <b>${fmtS(t.robber)}</b>
+    </p>
+    <details><summary>All timings (seconds)</summary>${renderTimingTable()}</details>
+  </div>
+
+  <h2>Rules options</h2>
+  <div class="card">
+    <label class="opt"><span>5–6 player extension<br><span class="hint">Adds the special building phase after every turn</span></span><input type="checkbox" data-setting="extension" ${s.extension?'checked':''}></label>
+    <label class="opt"><span>“Extra time” presses per turn<br><span class="hint">+${t.extension}s each, for long trades</span></span><input type="number" min="0" max="5" data-setting="extensionsPerTurn" value="${s.extensionsPerTurn}"></label>
+    <label class="opt"><span>Enforce one development card per turn<br><span class="hint">Greys out the other dev cards once one is played (VP cards excluded)</span></span><input type="checkbox" data-setting="strictDev" ${s.strictDev?'checked':''}></label>
+    <label class="opt"><span>Discard when holding more than<br><span class="hint">Official rule is 7</span></span><input type="number" min="5" max="15" data-setting="discardLimit" value="${s.discardLimit}"></label>
+    <label class="opt"><span>Sounds</span><input type="checkbox" data-setting="sound" ${s.sound?'checked':''}></label>
+    <label class="opt"><span>Vibration</span><input type="checkbox" data-setting="vibrate" ${s.vibrate?'checked':''}></label>
+  </div>
+
+  <details><summary>How the timer works</summary>${renderRulesText()}</details>
+
+  <div class="footer-actions"><button class="primary big" data-act="start" style="width:100%">Start game ▶</button></div>`;
+}
+
+function renderTimingTable(){
+  const t = state.settings.times;
+  return `<table>${TIME_LABELS.map(([k,l])=>`<tr><td>${l}</td><td class="num"><input type="number" min="0" max="3600" step="5" data-time="${k}" value="${t[k]}"></td></tr>`).join('')}</table>
+  <p class="hint">(+) values are added to the running turn timer when that action happens. Editing switches the preset to Custom.</p>`;
+}
+
+function renderRulesText(){
+  return `<div class="small">
+  <p><b>Placement.</b> Each player gets a settlement timer; once the settlement is down, the road timer is added on top (same as Colonist). Order snakes: 1→N, then N→1. After the second settlement everyone collects starting resources.</p>
+  <p><b>Turn.</b> A turn starts with the base time. You must roll first (a Knight may be played before rolling). After the roll, trading and building can be mixed freely; every trade, build, purchase or dev card <b>adds seconds</b> to the clock because it genuinely takes table time.</p>
+  <p><b>A 7.</b> The turn clock freezes. A group discard timer runs (everyone with more than the limit discards half, rounded down). Then the roller gets a robber timer to move the robber and steal. Then the turn resumes with whatever time it had.</p>
+  <p><b>Knight.</b> Same robber timer; the turn clock is paused meanwhile. One development card per turn, never one bought this turn (except VP cards, which may be revealed any time on your turn).</p>
+  <p><b>Monopoly.</b> Gets the biggest bonus: every other player has to count and hand over cards, which is slow in person.</p>
+  <p><b>Overtime.</b> The clock keeps counting into the red and logs it against the player. The app never forces a turn to end — your table decides the penalty (we suggest: no more trading once you are in the red).</p>
+  <p><b>5–6 players.</b> After each turn there is a special building phase where everyone else may build (no trading) — one shared timer.</p>
+  <p><b>Winning.</b> You can only win on your own turn — use “Declare win” from the menu while it is your turn.</p>
+  <p><b>Costs.</b> Road: brick+lumber · Settlement: brick+lumber+wool+grain · City: 3 ore+2 grain · Dev card: ore+wool+grain. Longest Road (5+) and Largest Army (3 knights) are worth 2 VP each; 10 VP wins.</p>
+  </div>`;
+}
+
+function timerColor(){
+  const a = actorIndex();
+  if(a==null) return {hex:'#3a4150', fg:'#fff'};
+  return colorOf(player(a).color);
+}
+
+function renderGame(){
+  const s = state.settings;
+  const a = actorIndex();
+  const c = timerColor();
+  let who, what, actions='';
+  const t = state.turn;
+  const chips = renderChips();
+
+  if(state.phase==='placement'){
+    const pl = state.placement;
+    const second = pl.idx >= state.players.length;
+    who = player(a).name;
+    what = `${second?'Second':'First'} placement · ${pl.step==='settlement'?'place your settlement':'place your road'}`;
+    actions = `<div class="actions">
+      ${pl.step==='settlement'
+        ? `<button class="primary big" style="width:100%" data-act="plSettlement">Settlement placed ✓ <span class="bonus">+${T('road')}s for road</span></button>`
+        : `<button class="ok big" style="width:100%" data-act="plRoad">Road placed → next player</button>`}
+      ${second && pl.step==='road' ? `<div class="banner">Take one resource for each hex touching this settlement.</div>`:''}
+    </div>`;
+  }
+  else if(state.phase==='discard'){
+    who = 'Everyone';
+    what = `7 rolled by ${player(t.player).name} · more than ${s.discardLimit} cards? Discard half (round down)`;
+    actions = `<div class="actions"><button class="ok big" style="width:100%" data-act="discardDone">Discards done → move robber</button>
+      <p class="hint center">The turn clock is frozen at ${fmt(t.savedRemaining)} while everyone discards.</p></div>`;
+  }
+  else if(state.phase==='robber'){
+    who = player(a).name;
+    what = 'Move the robber and steal one card';
+    actions = `<div class="actions"><button class="ok big" style="width:100%" data-act="robberDone">Robber placed → back to turn</button>
+      <p class="hint center">Turn clock frozen at ${fmt(Math.max(t.savedRemaining,0))}.</p></div>`;
+  }
+  else if(state.phase==='specialBuild'){
+    who = 'Everyone else';
+    what = `Special building phase · all players except ${player(t.player).name} may build (no trading)`;
+    actions = `<div class="actions"><button class="ok big" style="width:100%" data-act="sbDone">Done → ${player(t.nextPlayer).name}'s turn</button></div>`;
+  }
+  else if(state.phase==='turn'){
+    who = player(a).name;
+    const devLocked = s.strictDev && t.devPlayed;
+    const devHint = devLocked ? 'one dev card already played this turn' : '';
+    if(t.sub==='preroll'){
+      what = 'Roll the dice first';
+      actions = `<div class="actions">
+        <div class="grid">
+          <button class="primary big" data-act="roll" data-seven="0">🎲 Rolled<span class="sub">2–6 or 8–12 · collect resources</span></button>
+          <button class="danger big" data-act="roll" data-seven="1">🎲 Rolled a 7<span class="sub">discard → robber</span></button>
+        </div>
+        <h3>Before rolling</h3>
+        <button data-act="knight" ${devLocked?'disabled':''} style="width:100%">⚔️ Play Knight before rolling<span class="sub">${devHint||'moves the robber first, then roll'}</span></button>
+      </div>`;
+    } else {
+      what = 'Trade & build in any order';
+      const btn = (id) => { const A = ACTIONS[id]; const dis = A.dev && devLocked; return `<button data-act="action" data-id="${id}" ${dis?'disabled':''}>${A.label}<span class="bonus">+${T(A.key)}s</span><span class="sub">${A.hint}</span></button>`; };
+      actions = `<div class="actions">
+        ${t.banner ? `<div class="banner alert" data-act="clearBanner">${esc(t.banner)} <span class="muted">(tap to dismiss)</span></div>`:''}
+        <h3>Trade</h3>
+        <div class="grid">${btn('playerTrade')}${btn('bankTrade')}</div>
+        <h3>Build</h3>
+        <div class="grid">${btn('buildRoad')}${btn('buildSettlement')}${btn('buildCity')}${btn('devBuy')}</div>
+        <h3>Play development card ${devLocked?'<span class="muted">· already played this turn</span>':''}</h3>
+        <div class="grid">
+          <button data-act="knight" ${devLocked?'disabled':''}>⚔️ Knight<span class="bonus">${fmtS(T('robber'))} clock</span><span class="sub">move robber & steal</span></button>
+          ${btn('roadBuilding')}${btn('yearOfPlenty')}${btn('monopoly')}
+          <button data-act="vp" class="span2">🏆 Reveal Victory Point card<span class="sub">no limit, any time on your turn</span></button>
+        </div>
+        <h3>Turn</h3>
+        <div class="grid">
+          <button data-act="extra" ${t.extensionsUsed>=s.extensionsPerTurn?'disabled':''}>⏱ Extra time<span class="bonus">+${T('extension')}s</span><span class="sub">${s.extensionsPerTurn - t.extensionsUsed} left this turn</span></button>
+          <button class="ok big" data-act="endTurn">End turn ➜<span class="sub">pass the dice to ${player((t.player+1)%state.players.length).name}</span></button>
+        </div>
+      </div>`;
+    }
+  }
+
+  const info = state.phase==='placement' ? `Placement ${state.placement.idx+1}/${state.placement.order.length}` : `Turn ${state.turnNumber} · Round ${state.roundNumber}`;
+  return `
+  <div class="topbar">
+    <div class="info">${info} · ⏱ <span id="gameclock">${fmtLong(state.clock.elapsedMs)}</span></div>
+    <div class="row" style="flex:0 0 auto;gap:6px">
+      <button class="ghost" data-act="undo" ${undoStack.length?'':'disabled'} aria-label="Undo">↶</button>
+      <button data-act="pause" id="pausebtn">${state.paused?'▶ Resume':'⏸ Pause'}</button>
+      <button class="ghost" data-act="menu" aria-label="Menu">☰</button>
+    </div>
+  </div>
+  <div class="timer ${state.paused?'paused':''}" id="timer" style="background:${c.hex};color:${c.fg}">
+    <div class="who">${esc(who)}</div>
+    <div class="what">${esc(what)}</div>
+    <div class="clock" id="clock">${fmt(remainingMs())}</div>
+    <div class="bar"><i id="bar"></i></div>
+    <div class="meta"><span id="tlabel">${esc(state.timer.label)}</span><span id="tstatus"></span></div>
+    <div id="float"></div>
+  </div>
+  ${actions}
+  <div class="card" style="padding:10px 12px"><div class="chips">${chips}</div></div>`;
+}
+
+function renderChips(){
+  const a = actorIndex();
+  return state.players.map((p,i)=>{
+    const c = colorOf(p.color);
+    const over = p.stats.overtimeTurns ? ` · ${p.stats.overtimeTurns}⚠` : '';
+    return `<span class="chip ${i===a?'current':''}" style="background:${c.hex};color:${c.fg}"><span class="dot"></span>${esc(p.name)}<span style="opacity:.75;font-weight:400">${fmt(p.stats.timeUsed)}${over}</span></span>`;
+  }).join('');
+}
+
+function updateClock(){
+  const el = $('#clock'); if(!el || !state.timer) return;
+  const rem = remainingMs();
+  el.textContent = fmt(rem);
+  const timer = $('#timer');
+  const pct = Math.max(0, Math.min(100, rem/(state.timer.total*1000)*100));
+  const bar = $('#bar'); if(bar) bar.style.width = pct+'%';
+  timer.classList.toggle('over', rem<=0);
+  timer.classList.toggle('warn', rem>0 && rem<=T('warning')*1000);
+  timer.classList.toggle('paused', state.paused);
+  const st = $('#tstatus'); if(st) st.textContent = state.paused ? 'PAUSED' : rem<=0 ? 'OVERTIME' : `of ${fmt(state.timer.total*1000)}`;
+  const gc = $('#gameclock'); if(gc) gc.textContent = fmtLong(state.clock.elapsedMs);
+  const f = $('#float');
+  if(f && floatMsg){
+    if(now()-floatMsg.at < 1300){ if(!f.firstChild || f.firstChild.dataset.at!=String(floatMsg.at)){ f.innerHTML = `<div class="float" data-at="${floatMsg.at}">${esc(floatMsg.text)}</div>`; } }
+    else { f.innerHTML=''; floatMsg=null; }
+  }
+}
+
+function renderFinished(){
+  const w = state.winner!=null ? player(state.winner) : null;
+  const rows = state.players.map(p=>{
+    const st = p.stats, avg = st.turns ? st.timeUsed/st.turns : 0;
+    return `<tr><td><span class="chip" style="background:${colorOf(p.color).hex};color:${colorOf(p.color).fg}">${esc(p.name)}</span></td>
+      <td class="num">${st.turns}</td><td class="num">${fmt(st.timeUsed)}</td><td class="num">${fmt(avg)}</td><td class="num">${fmt(st.longestTurnMs)}</td>
+      <td class="num">${st.overtimeTurns}${st.overtimeMs>0?` (${fmt(st.overtimeMs)})`:''}</td></tr>`;
+  }).join('');
+  return `
+  <h1>${w?`🏆 ${esc(w.name)} wins!`:'Game over'}</h1>
+  <div class="card center"><div class="muted small">Total game time</div><div class="stat-big">${fmtLong(state.clock.elapsedMs)}</div><div class="muted small">${state.turnNumber} turns · ${state.roundNumber} rounds</div></div>
+  <div class="card" style="overflow-x:auto"><table><tr><th>Player</th><th class="num">Turns</th><th class="num">Total</th><th class="num">Avg</th><th class="num">Longest</th><th class="num">Overtime</th></tr>${rows}</table>
+  <p class="hint">Total includes placement, robber moves and overtime. Avg = total ÷ turns.</p></div>
+  <details><summary>Event log</summary><div class="log">${renderLogRows()}</div></details>
+  <div class="footer-actions"><button class="primary big" style="width:100%" data-act="newGame">New game (same players)</button></div>`;
+}
+
+function renderLogRows(){ return state.log.map(e=>`<div><time>${fmtLong(e.t)}</time>${esc(e.text)}</div>`).join('') || '<div class="muted">Nothing yet</div>'; }
+
+function renderOverlay(){
+  if(!overlay) return '';
+  let body='';
+  if(overlay==='menu'){
+    const canWin = state.phase==='turn';
+    body = `<h2 style="margin-top:0">Menu</h2>
+      <div class="grid">
+        <button data-act="pause">${state.paused?'▶ Resume':'⏸ Pause'}</button>
+        <button data-act="overlay" data-o="timings">⚙️ Timings</button>
+        <button data-act="overlay" data-o="log">📜 Event log</button>
+        <button data-act="overlay" data-o="rules">📖 Rules cheat sheet</button>
+        <button class="ok span2" data-act="overlay" data-o="winner" ${canWin?'':'disabled'}>🏆 Declare win${canWin?'':' (only on a player’s turn)'}</button>
+        <button data-act="overlay" data-o="confirmEnd" class="ghost">End game without a winner</button>
+        <button data-act="overlay" data-o="confirmRestart" class="danger">Abandon & restart</button>
+      </div>
+      <button class="ghost" style="width:100%;margin-top:10px" data-act="overlay" data-o="">Close</button>`;
+  } else if(overlay==='timings'){
+    body = `<h2 style="margin-top:0">Timings <span class="muted">(${state.settings.preset})</span></h2>${renderTimingTable()}
+      <button class="primary" style="width:100%;margin-top:10px" data-act="overlay" data-o="">Done</button>`;
+  } else if(overlay==='log'){
+    body = `<h2 style="margin-top:0">Event log</h2><div class="log">${renderLogRows()}</div>
+      <button class="primary" style="width:100%;margin-top:10px" data-act="overlay" data-o="">Close</button>`;
+  } else if(overlay==='rules'){
+    body = `<h2 style="margin-top:0">Rules cheat sheet</h2>${renderRulesText()}
+      <button class="primary" style="width:100%;margin-top:10px" data-act="overlay" data-o="">Close</button>`;
+  } else if(overlay==='confirmEnd' || overlay==='confirmRestart'){
+    const restart = overlay==='confirmRestart';
+    body = `<h2 style="margin-top:0">${restart?'Abandon this game?':'End the game now?'}</h2>
+      <p class="muted small">${restart?'Goes back to setup. Stats for this game are discarded.':'Shows the stats screen with no winner.'}</p>
+      <div class="grid"><button class="ghost" data-act="overlay" data-o="menu">Keep playing</button>
+      <button class="danger" data-act="${restart?'restart':'endNoWinner'}">${restart?'Yes, restart':'Yes, end game'}</button></div>`;
+  } else if(overlay==='winner'){
+    body = `<h2 style="margin-top:0">Who reached 10 points?</h2>
+      <div class="grid">${state.players.map((p,i)=>`<button data-act="win" data-i="${i}" style="background:${colorOf(p.color).hex};color:${colorOf(p.color).fg}">${esc(p.name)}</button>`).join('')}</div>
+      <button class="ghost" style="width:100%;margin-top:10px" data-act="overlay" data-o="">Cancel</button>`;
+  }
+  return `<div class="overlay" id="overlay"><div class="card">${body}</div></div>`;
+}
+
+// ---------- Events ----------
+document.addEventListener('click', e=>{
+  const btn = e.target.closest('[data-act]'); if(!btn) return;
+  unlockAudio();
+  const act = btn.dataset.act; const s = state.settings;
+  switch(act){
+    case 'playerAdd': { const used = s.players.map(p=>p.color); const c = COLORS.find(c=>!used.includes(c.id)) || COLORS[0]; s.players.push({name:`Player ${s.players.length+1}`, color:c.id}); if(s.players.length>=5) s.extension=true; break; }
+    case 'playerRemove': s.players.splice(+btn.dataset.i,1); if(s.players.length<5) s.extension=false; break;
+    case 'playerUp': { const i=+btn.dataset.i; [s.players[i-1],s.players[i]]=[s.players[i],s.players[i-1]]; break; }
+    case 'playerShuffle': for(let i=s.players.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [s.players[i],s.players[j]]=[s.players[j],s.players[i]]; } break;
+    case 'preset': if(btn.dataset.k!=='custom'){ s.preset=btn.dataset.k; s.times=timesForPreset(s.preset); } else s.preset='custom'; break;
+    case 'start': startGame(); return;
+    case 'plSettlement': placementSettlementDown(); return;
+    case 'plRoad': placementRoadDown(); return;
+    case 'roll': rolled(btn.dataset.seven==='1'); return;
+    case 'discardDone': discardDone(); return;
+    case 'robberDone': robberDone(); return;
+    case 'action': doAction(btn.dataset.id); return;
+    case 'knight': playKnight(); return;
+    case 'vp': revealVP(); return;
+    case 'extra': extraTime(); return;
+    case 'clearBanner': clearBanner(); return;
+    case 'endTurn': endTurn(); return;
+    case 'sbDone': specialBuildDone(); return;
+    case 'pause': togglePause(); overlay=null; break;
+    case 'undo': undo(); return;
+    case 'menu': overlay='menu'; break;
+    case 'overlay': overlay = btn.dataset.o || null; break;
+    case 'win': finishGame(+btn.dataset.i); return;
+    case 'endNoWinner': finishGame(null); return;
+    case 'restart': resetToSetup(); return;
+    case 'newGame': resetToSetup(); return;
+  }
+  commit();
+});
+document.addEventListener('input', e=>{
+  const el = e.target; const s = state.settings;
+  if(el.dataset.playerName!=null){ s.players[+el.dataset.playerName].name = el.value; save(); return; }
+  if(el.dataset.time){ const v = Math.max(0, parseInt(el.value)||0); s.times[el.dataset.time]=v; s.preset='custom'; save(); const sel=$('.preset'); if(sel) sel.querySelectorAll('button').forEach(b=>b.classList.toggle('sel', b.dataset.k==='custom')); return; }
+  if(el.dataset.setting){
+    const k = el.dataset.setting;
+    s[k] = el.type==='checkbox' ? el.checked : Math.max(0, parseInt(el.value)||0);
+    save(); if(el.type==='checkbox') render();
+    return;
+  }
+});
+document.addEventListener('change', e=>{
+  const el = e.target; const s = state.settings;
+  if(el.dataset.playerColor!=null){ s.players[+el.dataset.playerColor].color = el.value; commit(); }
+});
+document.addEventListener('keydown', e=>{
+  if(e.target.tagName==='INPUT'||e.target.tagName==='SELECT') return;
+  if(e.code==='Space'){ e.preventDefault(); if(state.phase!=='setup'&&state.phase!=='finished'){ togglePause(); commit(); } }
+});
+
+// ---------- Boot ----------
+(function boot(){
+  state = load() || freshState();
+  if(state.phase==='setup' || state.phase==='finished') { state.paused=false; }
+  lastTick = now();
+  render();
+  setInterval(tick, 200);
+  if(state.phase!=='setup') keepAwake();
+})();
+</script>
+</body>
+</html>
