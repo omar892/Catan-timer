@@ -11,7 +11,8 @@ const assert = (c, m) => { if (!c) { console.error('FAIL:', m); process.exitCode
 
   const S = () => page.evaluate(() => JSON.parse(JSON.stringify(state)));
   const rem = () => page.evaluate(() => remainingMs());
-  const click = sel => page.click(sel);
+  const NAV = /start|plSettlement|plRoad|roll|discardDone|robberDone|knight|endTurn|sbDone|win|undo/;
+  const click = async sel => { if (NAV.test(sel)) await page.waitForTimeout(720); await page.click(sel); };
 
   // Setup: 5 players, Normal
   await click('[data-act="playerAdd"]');
@@ -32,8 +33,8 @@ const assert = (c, m) => { if (!c) { console.error('FAIL:', m); process.exitCode
   assert(Math.abs((await rem()) - 225000) < 1500, 'road adds 45s → 3:45');
   for (let i = 0; i < 10; i++) {
     s = await S();
-    if (s.placement && s.placement.step === 'settlement') await click('[data-act="plSettlement"]');
-    await click('[data-act="plRoad"]');
+    if (s.placement && s.placement.step === 'settlement') { await click('[data-act="plSettlement"]'); await page.waitForTimeout(720); }
+    await click('[data-act="plRoad"]'); await page.waitForTimeout(720);
   }
   s = await S();
   assert(s.phase === 'turn' && s.turn.player === 0 && s.turn.sub === 'preroll' && s.turnNumber === 1, 'placement done → turn 1 preroll');
@@ -121,6 +122,7 @@ const assert = (c, m) => { if (!c) { console.error('FAIL:', m); process.exitCode
   await click('[data-act="win"][data-i="1"]');
   s = await S();
   assert(s.phase === 'finished' && s.winner === 1, 'winner declared');
+  assert((await page.textContent('body')).includes('Slowest player'), 'slowest player award shown');
   await page.screenshot({ path: __dirname + '/out/finished.png', fullPage: true });
   await click('[data-act="newGame"]');
   s = await S();
@@ -129,8 +131,19 @@ const assert = (c, m) => { if (!c) { console.error('FAIL:', m); process.exitCode
   // Screenshots of main screens
   await click('[data-act="start"]');
   await page.screenshot({ path: __dirname + '/out/placement.png' });
-  for (let i = 0; i < 10; i++) { await click('[data-act="plSettlement"]'); await click('[data-act="plRoad"]'); }
+  for (let i = 0; i < 10; i++) { await click('[data-act="plSettlement"]'); await page.waitForTimeout(720); await click('[data-act="plRoad"]'); await page.waitForTimeout(720); }
   await click('[data-act="roll"][data-seven="0"]');
+  // Double-tap guard: two rapid End turn taps must only end one turn
+  await page.evaluate(() => { state.settings.extension = false; });
+  await click('[data-act="action"][data-id="buildRoad"]');
+  const p0 = (await S()).turn.player;
+  await page.waitForTimeout(720);
+  await page.click('[data-act="endTurn"]', { clickCount: 2 });
+  await page.waitForTimeout(100);
+  s = await S();
+  assert(s.turn.player === (p0 + 1) % 5 && s.turnNumber === 2, 'double tap on End turn ends only one turn');
+  await page.waitForTimeout(800);
+
   await page.screenshot({ path: __dirname + '/out/turn.png', fullPage: true });
   await browser.close();
   console.log(process.exitCode ? 'SMOKE FAILED' : 'SMOKE PASSED');

@@ -101,6 +101,9 @@ summary{cursor:pointer;font-weight:600;padding:8px 0;color:var(--accent)}
 .kbd{font-size:12px;color:var(--muted)}
 .footer-actions{position:sticky;bottom:0;background:linear-gradient(transparent,var(--bg) 30%);padding-top:14px;margin-top:10px}
 .stat-big{font-size:28px;font-weight:800}
+.awards{display:grid;gap:12px}
+.award{display:grid;grid-template-columns:44px 1fr;gap:10px;align-items:center}
+.award .icon{font-size:30px;text-align:center}
 .hint{font-size:13px;color:var(--muted);margin-top:4px}
 .center{text-align:center}
 </style>
@@ -192,8 +195,10 @@ function defaultSettings(){
   };
 }
 
+const STATE_VERSION = 2;
 function freshState(){
   return {
+    v:STATE_VERSION,
     phase:'setup',          // setup | placement | turn | discard | robber | specialBuild | finished
     paused:false,
     settings: defaultSettings(),
@@ -212,7 +217,7 @@ function load(){
     const raw = localStorage.getItem(STORAGE_KEY);
     if(!raw) return null;
     const {state:s, savedAt} = JSON.parse(raw);
-    if(!s || !s.settings) return null;
+    if(!s || !s.settings || s.v!==STATE_VERSION) return null;
     // Freeze the timer where it was when the page was left.
     if(s.timer && !s.paused && s.phase!=='setup' && s.phase!=='finished'){
       s.timer.pausedRemaining = s.timer.endAt - savedAt;
@@ -249,7 +254,13 @@ function log(text){
 // ---------- Audio / haptics / wake lock ----------
 let audioCtx = null;
 function unlockAudio(){
-  if(!audioCtx){ try{ audioCtx = new (window.AudioContext||window.webkitAudioContext)(); }catch(e){} }
+  if(!audioCtx){
+    try{
+      audioCtx = new (window.AudioContext||window.webkitAudioContext)();
+      // iOS only unlocks audio if something is played inside the user gesture.
+      const b = audioCtx.createBufferSource(); b.buffer = audioCtx.createBuffer(1,1,22050); b.connect(audioCtx.destination); b.start(0);
+    }catch(e){}
+  }
   if(audioCtx && audioCtx.state==='suspended') audioCtx.resume().catch(()=>{});
 }
 function beep(freq, dur, when=0, type='square', gain=0.25){
@@ -334,12 +345,14 @@ function tick(){
     state.clock.elapsedMs += dt;
     const a = actorIndex();
     if(a!=null){ player(a).stats.timeUsed += dt; }
-    if(state.turn && (state.phase==='turn'||state.phase==='robber'||state.phase==='discard')) state.turn.elapsedMs += dt;
+    // Discard and special-build phases are table time, not the active player's turn.
+    const ownTurn = state.turn && (state.phase==='turn'||state.phase==='robber');
+    if(ownTurn) state.turn.elapsedMs += dt;
     const rem = state.timer.endAt - t;
     const tm = state.timer;
     if(rem<=0){
       if(a!=null) player(a).stats.overtimeMs += dt;
-      if(state.turn && state.phase!=='specialBuild') state.turn.overtimeMs += dt;
+      if(ownTurn) state.turn.overtimeMs += dt;
       if(!tm.expired){
         tm.expired = true; SFX.expired();
         if(a!=null && state.turn && state.phase!=='placement' && !state.turn.wentOver){ state.turn.wentOver=true; player(a).stats.overtimeTurns++; }
@@ -356,9 +369,14 @@ function tick(){
 function snapshot(){ undoStack.push(JSON.stringify(state)); if(undoStack.length>15) undoStack.shift(); }
 function undo(){
   const s = undoStack.pop(); if(!s) return;
-  const wasPaused = state.paused;
+  const cur = state;
   state = JSON.parse(s);
-  if(wasPaused && !state.paused){ state.paused=true; state.timer.pausedRemaining = state.timer.endAt-now(); }
+  // Keep the pause state the user is in right now.
+  if(cur.paused && !state.paused){ state.paused=true; state.timer.pausedRemaining = state.timer.endAt-now(); }
+  else if(!cur.paused && state.paused){ state.paused=false; state.timer.endAt = now()+state.timer.pausedRemaining; }
+  // Wall-clock totals never run backwards, only the game decisions do.
+  state.clock.elapsedMs = Math.max(state.clock.elapsedMs, cur.clock.elapsedMs);
+  state.players.forEach((p,i)=>{ const c = cur.players[i]; if(c){ p.stats.timeUsed = Math.max(p.stats.timeUsed, c.stats.timeUsed); p.stats.overtimeMs = Math.max(p.stats.overtimeMs, c.stats.overtimeMs); } });
   log('Undid last action');
   commit();
 }
@@ -514,7 +532,7 @@ function specialBuildDone(){
   beginTurn(state.turn.nextPlayer);
 }
 function finishGame(winnerIdx){
-  if(state.turn && state.phase==='turn'){
+  if(state.turn && (state.phase==='turn'||state.phase==='robber')){
     const p = player(state.turn.player); p.stats.turns++;
     p.stats.longestTurnMs = Math.max(p.stats.longestTurnMs, state.turn.elapsedMs);
   }
@@ -750,17 +768,34 @@ function updateClock(){
 
 function renderFinished(){
   const w = state.winner!=null ? player(state.winner) : null;
-  const rows = state.players.map(p=>{
+  const chip = p => `<span class="chip" style="background:${colorOf(p.color).hex};color:${colorOf(p.color).fg}">${esc(p.name)}</span>`;
+  const withAvg = state.players.map(p=>({p, avg: p.stats.turns ? p.stats.timeUsed/p.stats.turns : 0}));
+  const byTotal = [...state.players].sort((a,b)=>b.stats.timeUsed-a.stats.timeUsed);
+  const rows = byTotal.map(p=>{
     const st = p.stats, avg = st.turns ? st.timeUsed/st.turns : 0;
-    return `<tr><td><span class="chip" style="background:${colorOf(p.color).hex};color:${colorOf(p.color).fg}">${esc(p.name)}</span></td>
+    return `<tr><td>${chip(p)}</td>
       <td class="num">${st.turns}</td><td class="num">${fmt(st.timeUsed)}</td><td class="num">${fmt(avg)}</td><td class="num">${fmt(st.longestTurnMs)}</td>
       <td class="num">${st.overtimeTurns}${st.overtimeMs>0?` (${fmt(st.overtimeMs)})`:''}</td></tr>`;
   }).join('');
+  // Awards, just for fun.
+  const played = withAvg.filter(x=>x.p.stats.turns>0);
+  const slowest = played.length ? played.reduce((a,b)=>b.avg>a.avg?b:a) : null;
+  const fastest = played.length>1 ? played.reduce((a,b)=>b.avg<a.avg?b:a) : null;
+  const longest = state.players.reduce((a,b)=>b.stats.longestTurnMs>a.stats.longestTurnMs?b:a, state.players[0]);
+  const overs = state.players.filter(p=>p.stats.overtimeTurns>0).sort((a,b)=>b.stats.overtimeMs-a.stats.overtimeMs)[0];
+  const award = (icon, title, p, detail) => `<div class="award"><div class="icon">${icon}</div><div><div class="muted small">${title}</div><div class="row" style="gap:8px;align-items:center">${chip(p)}<span class="small muted">${detail}</span></div></div></div>`;
+  const awards = [
+    slowest && award('🐢','Slowest player', slowest.p, `${fmt(slowest.avg)} per turn on average`),
+    longest && longest.stats.longestTurnMs>0 && award('⏳','Longest single turn', longest, fmt(longest.stats.longestTurnMs)),
+    overs && award('🚨','Most overtime', overs, `${overs.stats.overtimeTurns} turn${overs.stats.overtimeTurns>1?'s':''} over, ${fmt(overs.stats.overtimeMs)} total`),
+    fastest && fastest!==slowest && award('⚡','Fastest player', fastest.p, `${fmt(fastest.avg)} per turn on average`),
+  ].filter(Boolean).join('');
   return `
   <h1>${w?`🏆 ${esc(w.name)} wins!`:'Game over'}</h1>
   <div class="card center"><div class="muted small">Total game time</div><div class="stat-big">${fmtLong(state.clock.elapsedMs)}</div><div class="muted small">${state.turnNumber} turns · ${state.roundNumber} rounds</div></div>
+  ${awards ? `<div class="card awards">${awards}</div>` : ''}
   <div class="card" style="overflow-x:auto"><table><tr><th>Player</th><th class="num">Turns</th><th class="num">Total</th><th class="num">Avg</th><th class="num">Longest</th><th class="num">Overtime</th></tr>${rows}</table>
-  <p class="hint">Total includes placement, robber moves and overtime. Avg = total ÷ turns.</p></div>
+  <p class="hint">Sorted slowest first. Total includes placement, robber moves and overtime. Avg = total ÷ turns.</p></div>
   <details><summary>Event log</summary><div class="log">${renderLogRows()}</div></details>
   <div class="footer-actions"><button class="primary big" style="width:100%" data-act="newGame">New game (same players)</button></div>`;
 }
@@ -771,7 +806,7 @@ function renderOverlay(){
   if(!overlay) return '';
   let body='';
   if(overlay==='menu'){
-    const canWin = state.phase==='turn';
+    const canWin = state.phase==='turn' || state.phase==='robber';
     body = `<h2 style="margin-top:0">Menu</h2>
       <div class="grid">
         <button data-act="pause">${state.paused?'▶ Resume':'⏸ Pause'}</button>
@@ -807,10 +842,14 @@ function renderOverlay(){
 }
 
 // ---------- Events ----------
+// Actions that move the game forward. A nervous double-tap must not skip a whole player.
+const NAV_ACTS = new Set(['start','plSettlement','plRoad','roll','discardDone','robberDone','knight','endTurn','sbDone','win','undo']);
+let lastNavAt = 0;
 document.addEventListener('click', e=>{
   const btn = e.target.closest('[data-act]'); if(!btn) return;
   unlockAudio();
   const act = btn.dataset.act; const s = state.settings;
+  if(NAV_ACTS.has(act)){ if(now()-lastNavAt < 700) return; lastNavAt = now(); }
   switch(act){
     case 'playerAdd': { const used = s.players.map(p=>p.color); const c = COLORS.find(c=>!used.includes(c.id)) || COLORS[0]; s.players.push({name:`Player ${s.players.length+1}`, color:c.id}); if(s.players.length>=5) s.extension=true; break; }
     case 'playerRemove': s.players.splice(+btn.dataset.i,1); if(s.players.length<5) s.extension=false; break;
