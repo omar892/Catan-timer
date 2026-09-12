@@ -23,6 +23,9 @@ const assert = (c, m) => { if (!c) { console.error('FAIL:', m); process.exitCode
   assert(s.settings.times.turn === 60 && s.settings.times.settlement === 120 && s.settings.times.road === 30, 'fast preset loaded');
   assert(s.settings.times.monopoly === 35 && s.settings.times.discard === 35, 'fast preset scales bonuses (' + s.settings.times.monopoly + ')');
   await click('[data-act="preset"][data-k="normal"]');
+  await click('[data-act="dice"][data-v="physical"]');
+  s = await S();
+  assert(s.settings.dice === 'physical', 'physical dice selected');
   await click('[data-act="start"]');
 
   // Placement
@@ -128,7 +131,52 @@ const assert = (c, m) => { if (!c) { console.error('FAIL:', m); process.exitCode
   s = await S();
   assert(s.phase === 'setup' && s.settings.players.length === 5, 'new game keeps players');
 
-  // Screenshots of main screens
+  // In-app dice
+  await click('[data-act="dice"][data-v="app"]');
+  await click('[data-act="start"]');
+  await page.screenshot({ path: __dirname + '/out/placement.png' });
+  for (let i = 0; i < 10; i++) { await click('[data-act="plSettlement"]'); await page.waitForTimeout(720); await click('[data-act="plRoad"]'); await page.waitForTimeout(720); }
+  assert(await page.isVisible('[data-act="rollDice"]'), 'in-app roll button shown in pre-roll');
+  await page.screenshot({ path: __dirname + '/out/preroll-dice.png' });
+  await page.evaluate(() => { let c = 0; randomDie = () => (c++ % 2 ? 4 : 2); });   // 2+4 = 6
+  await click('[data-act="rollDice"]');
+  s = await S();
+  assert(s.turn.roll && s.turn.roll.rolling && s.turn.sub === 'preroll', 'dice animate before routing');
+  await page.waitForTimeout(1200);
+  s = await S();
+  assert(s.turn.sub === 'main' && s.turn.roll.d1 + s.turn.roll.d2 === 6 && s.rolls.length === 1, 'roll of 6 routes to trade & build and is recorded');
+  assert(s.players[0].stats.rolls === 1 && s.players[0].stats.rollSum === 6, 'roll stats attributed to roller');
+  assert((await page.textContent('#timer')).includes('Rolled 6'), 'timer card shows the roll');
+  await page.screenshot({ path: __dirname + '/out/turn.png', fullPage: true });
+  // Undo a roll
+  await click('[data-act="undo"]');
+  s = await S();
+  assert(s.turn.sub === 'preroll' && s.rolls.length === 0 && s.players[0].stats.rolls === 0, 'undo reverts the roll and its stats');
+  // Forced 7 → discard
+  await page.evaluate(() => { let c = 0; randomDie = () => (c++ % 2 ? 4 : 3); });
+  await click('[data-act="rollDice"]');
+  await page.waitForTimeout(1200);
+  s = await S();
+  assert(s.phase === 'discard' && s.players[0].stats.sevens === 1, 'roll of 7 goes to discard and counts a seven');
+  await click('[data-act="discardDone"]'); await click('[data-act="robberDone"]');
+  // Reload mid-roll finishes the roll
+  await click('[data-act="endTurn"]'); await click('[data-act="sbDone"]');
+  await page.evaluate(() => { randomDie = () => 5; });
+  await click('[data-act="rollDice"]');
+  await page.waitForTimeout(150);
+  await page.evaluate(() => save());
+  await page.reload();
+  s = await S();
+  assert(s.turn.player === 1 && s.turn.sub === 'main' && s.rolls.length === 2 && !s.turn.roll.rolling, 'reload during a roll lands the dice');
+  await click('[data-act="pause"]');
+  await click('[data-act="menu"]'); await click('[data-act="overlay"][data-o="winner"]'); await click('[data-act="win"][data-i="0"]');
+  const body = await page.textContent('body');
+  assert(body.includes('Robber magnet') && body.includes('2 rolls'), 'dice awards and histogram on stats screen');
+  await page.screenshot({ path: __dirname + '/out/finished-dice.png', fullPage: true });
+  await click('[data-act="newGame"]');
+
+  // Screenshots of main screens (physical dice)
+  await click('[data-act="dice"][data-v="physical"]');
   await click('[data-act="start"]');
   await page.screenshot({ path: __dirname + '/out/placement.png' });
   for (let i = 0; i < 10; i++) { await click('[data-act="plSettlement"]'); await page.waitForTimeout(720); await click('[data-act="plRoad"]'); await page.waitForTimeout(720); }

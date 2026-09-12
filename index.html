@@ -101,6 +101,32 @@ summary{cursor:pointer;font-weight:600;padding:8px 0;color:var(--accent)}
 .kbd{font-size:12px;color:var(--muted)}
 .footer-actions{position:sticky;bottom:0;background:linear-gradient(transparent,var(--bg) 30%);padding-top:14px;margin-top:10px}
 .stat-big{font-size:28px;font-weight:800}
+/* Dice */
+.seg{display:flex;gap:0;flex:0 0 auto}
+.seg button{min-height:40px;padding:8px 14px;border-radius:0;font-size:14px}
+.seg button:first-child{border-radius:10px 0 0 10px}
+.seg button:last-child{border-radius:0 10px 10px 0;border-left:none}
+.seg button.sel{background:var(--accent);color:#161000;border-color:transparent}
+.dicebox{display:grid;gap:12px}
+.dice{display:flex;justify-content:center;gap:18px;padding:6px 0}
+.dice.empty{opacity:.35}
+.die{width:72px;height:72px;background:#fbfaf5;border-radius:14px;display:grid;grid-template-columns:repeat(3,1fr);grid-template-rows:repeat(3,1fr);padding:9px;
+  box-shadow:0 6px 16px rgba(0,0,0,.45), inset 0 -3px 0 rgba(0,0,0,.12)}
+.die i{display:block;width:70%;height:70%;margin:auto;border-radius:50%}
+.die i.on{background:#1b1d22}
+.die.small{width:34px;height:34px;padding:4px;border-radius:7px;box-shadow:0 2px 6px rgba(0,0,0,.35)}
+.die.rolling{animation:tumble .18s infinite}
+@keyframes tumble{0%{transform:rotate(-8deg) translateY(0)}50%{transform:rotate(8deg) translateY(-6px)}100%{transform:rotate(-8deg) translateY(0)}}
+@media (prefers-reduced-motion:reduce){.die.rolling{animation:none}}
+/* Roll histogram */
+.hist{display:flex;gap:2px;align-items:flex-end;height:150px;margin-top:10px}
+.hcol{flex:1 1 0;display:flex;flex-direction:column;align-items:center;height:100%;min-width:0}
+.hval{font-size:11px;color:var(--muted);font-variant-numeric:tabular-nums;height:16px;line-height:16px}
+.hbar{flex:1 1 auto;width:100%;position:relative;border-bottom:1px solid var(--line)}
+.hbar i{position:absolute;left:0;right:0;bottom:0;background:var(--accent);border-radius:4px 4px 0 0;opacity:.9}
+.hbar b{position:absolute;left:0;right:0;height:0;border-top:2px dashed var(--muted);opacity:.7}
+.hlab{font-size:12px;color:var(--muted);padding-top:6px;font-variant-numeric:tabular-nums}
+.hlab.seven{color:var(--text);font-weight:700}
 .awards{display:grid;gap:12px}
 .award{display:grid;grid-template-columns:44px 1fr;gap:10px;align-items:center}
 .award .icon{font-size:30px;text-align:center}
@@ -192,10 +218,11 @@ function defaultSettings(){
     strictDev:true,         // one dev card per turn
     discardLimit:7,         // more than this many cards → discard on a 7
     sound:true, vibrate:true,
+    dice:'app',             // 'app' rolls in the app and tracks stats; 'physical' uses real dice
   };
 }
 
-const STATE_VERSION = 2;
+const STATE_VERSION = 3;
 function freshState(){
   return {
     v:STATE_VERSION,
@@ -206,6 +233,7 @@ function freshState(){
     turnNumber:0, roundNumber:0,
     clock:{elapsedMs:0},
     log:[], winner:null, gameStartedAt:null,
+    rolls:[],               // {p, d1, d2} for every in-app roll
   };
 }
 
@@ -283,6 +311,7 @@ const SFX = {
   expired(){ for(let i=0;i<4;i++) beep(i%2?520:420,0.25,i*0.3); vibrate([250,120,250,120,400]); },
   over(){ beep(420,0.15); vibrate(120); },
   next(){ beep(523,0.09,0,'triangle',0.2); beep(659,0.09,0.1,'triangle',0.2); beep(784,0.14,0.2,'triangle',0.2); },
+  dice(){ for(let i=0;i<8;i++) beep(1400+Math.random()*900, 0.03, i*0.1, 'square', 0.08); beep(880,0.12,0.85,'triangle',0.2); },
 };
 let wakeLock = null;
 async function keepAwake(){
@@ -386,7 +415,7 @@ function startGame(){
   const s = state.settings;
   state.players = s.players.map((p,i)=>({
     id:i, name:p.name.trim()||`Player ${i+1}`, color:p.color,
-    stats:{turns:0, timeUsed:0, overtimeMs:0, overtimeTurns:0, longestTurnMs:0, extensionsUsed:0},
+    stats:{turns:0, timeUsed:0, overtimeMs:0, overtimeTurns:0, longestTurnMs:0, extensionsUsed:0, rolls:0, rollSum:0, sevens:0},
   }));
   const n = state.players.length;
   const order = [...Array(n).keys()].concat([...Array(n).keys()].reverse());
@@ -431,21 +460,61 @@ function beginTurn(pIdx, first=false){
   commit();
 }
 
-function rolled(seven){
-  snapshot();
+function rolled(seven, fromDice=false){
+  if(!fromDice){ snapshot(); log(seven ? `${actorName()} rolled a 7` : `${actorName()} rolled — collect resources`); }
   state.turn.rolled=true;
   if(seven){
-    log(`${actorName()} rolled a 7`);
     // Everyone with too many cards discards; the turn timer is frozen meanwhile.
     state.turn.savedRemaining = remainingMs(); state.turn.savedTotal = state.timer.total;
     state.phase='discard';
     setTimer(T('discard'), 'Discard (everyone)');
     vibrate([60,40,60]);
   } else {
-    log(`${actorName()} rolled — collect resources`);
     state.turn.sub='main';
   }
   commit();
+}
+
+// ---------- In-app dice ----------
+function randomDie(){
+  const a = new Uint32Array(1);
+  if(window.crypto && crypto.getRandomValues){ crypto.getRandomValues(a); return 1 + (a[0] % 6); }
+  return 1 + Math.floor(Math.random()*6);
+}
+let rollAnim = null;
+function isRolling(){ return !!(state.turn && state.turn.roll && state.turn.roll.rolling); }
+function rollDice(){
+  if(state.phase!=='turn' || state.turn.sub!=='preroll' || isRolling()) return;
+  snapshot();
+  state.turn.roll = {d1:randomDie(), d2:randomDie(), rolling:true};
+  SFX.dice(); vibrate([30,30,30,30,30]);
+  commit();
+  let n = 0;
+  clearInterval(rollAnim);
+  rollAnim = setInterval(()=>{
+    n++;
+    const el = $('#dice');
+    if(el) el.innerHTML = diceHTML(1+Math.floor(Math.random()*6), 1+Math.floor(Math.random()*6), true);
+    if(n>=9){ clearInterval(rollAnim); rollAnim=null; finishRoll(); }
+  }, 90);
+}
+function finishRoll(){
+  if(!isRolling()) return;
+  const r = state.turn.roll; r.rolling = false;
+  const sum = r.d1 + r.d2, p = player(state.turn.player);
+  p.stats.rolls++; p.stats.rollSum += sum; if(sum===7) p.stats.sevens++;
+  state.rolls.push({p:state.turn.player, d1:r.d1, d2:r.d2});
+  log(`${p.name} rolled ${r.d1}+${r.d2} = ${sum}`);
+  rolled(sum===7, true);
+}
+const PIPS = {1:[4], 2:[2,6], 3:[2,4,6], 4:[0,2,6,8], 5:[0,2,4,6,8], 6:[0,2,3,5,6,8]};
+function dieHTML(n, cls=''){
+  const on = PIPS[n] || [];
+  return `<div class="die ${cls}" aria-label="${n}">${[0,1,2,3,4,5,6,7,8].map(i=>`<i class="${on.includes(i)?'on':''}"></i>`).join('')}</div>`;
+}
+function diceHTML(d1, d2, rolling=false, small=false){
+  const cls = (rolling?'rolling ':'') + (small?'small':'');
+  return dieHTML(d1, cls) + dieHTML(d2, cls);
 }
 function discardDone(){
   snapshot();
@@ -602,6 +671,8 @@ function renderSetup(){
 
   <h2>Rules options</h2>
   <div class="card">
+    <div class="opt"><span>Dice<br><span class="hint">In-app dice roll with one tap, route a 7 automatically and track roll stats</span></span>
+      <div class="seg"><button data-act="dice" data-v="app" class="${s.dice==='app'?'sel':''}">In-app</button><button data-act="dice" data-v="physical" class="${s.dice!=='app'?'sel':''}">Physical</button></div></div>
     <label class="opt"><span>5–6 player extension<br><span class="hint">Adds the special building phase after every turn</span></span><input type="checkbox" data-setting="extension" ${s.extension?'checked':''}></label>
     <label class="opt"><span>“Extra time” presses per turn<br><span class="hint">+${t.extension}s each, for long trades</span></span><input type="number" min="0" max="5" data-setting="extensionsPerTurn" value="${s.extensionsPerTurn}"></label>
     <label class="opt"><span>Enforce one development card per turn<br><span class="hint">Greys out the other dev cards once one is played (VP cards excluded)</span></span><input type="checkbox" data-setting="strictDev" ${s.strictDev?'checked':''}></label>
@@ -624,6 +695,7 @@ function renderTimingTable(){
 function renderRulesText(){
   return `<div class="small">
   <p><b>Placement.</b> Each player gets a settlement timer; once the settlement is down, the road timer is added on top (same as Colonist). Order snakes: 1→N, then N→1. After the second settlement everyone collects starting resources.</p>
+  <p><b>Dice.</b> With in-app dice, one tap rolls two dice, a 7 goes straight to the discard phase, and every roll is recorded for the end-of-game stats. With physical dice you tap “Rolled” or “Rolled a 7” instead.</p>
   <p><b>Turn.</b> A turn starts with the base time. You must roll first (a Knight may be played before rolling). After the roll, trading and building can be mixed freely; every trade, build, purchase or dev card <b>adds seconds</b> to the clock because it genuinely takes table time.</p>
   <p><b>A 7.</b> The turn clock freezes. A group discard timer runs (everyone with more than the limit discards half, rounded down). Then the roller gets a robber timer to move the robber and steal. Then the turn resumes with whatever time it had.</p>
   <p><b>Knight.</b> Same robber timer; the turn clock is paused meanwhile. One development card per turn, never one bought this turn (except VP cards, which may be revealed any time on your turn).</p>
@@ -663,7 +735,7 @@ function renderGame(){
   }
   else if(state.phase==='discard'){
     who = 'Everyone';
-    what = `7 rolled by ${player(t.player).name} · more than ${s.discardLimit} cards? Discard half (round down)`;
+    what = `${t.roll?`${t.roll.d1}+${t.roll.d2} = 7`:'7'} rolled by ${player(t.player).name} · more than ${s.discardLimit} cards? Discard half (round down)`;
     actions = `<div class="actions"><button class="ok big" style="width:100%" data-act="discardDone">Discards done → move robber</button>
       <p class="hint center">The turn clock is frozen at ${fmt(t.savedRemaining)} while everyone discards.</p></div>`;
   }
@@ -684,16 +756,24 @@ function renderGame(){
     const devHint = devLocked ? 'one dev card already played this turn' : '';
     if(t.sub==='preroll'){
       what = 'Roll the dice first';
-      actions = `<div class="actions">
-        <div class="grid">
+      const rolling = isRolling();
+      const last = state.rolls[state.rolls.length-1];
+      const rollUI = s.dice==='app'
+        ? `<div class="dicebox">
+             <div class="dice ${last||rolling?'':'empty'}" id="dice">${rolling ? diceHTML(t.roll.d1, t.roll.d2, true) : last ? diceHTML(last.d1, last.d2) : diceHTML(6, 6)}</div>
+             <button class="primary big" data-act="rollDice" ${rolling?'disabled':''} style="width:100%">${rolling?'Rolling…':'🎲 Roll the dice'}<span class="sub">${last?`last roll ${last.d1+last.d2}`:'tap to roll two dice'}</span></button>
+           </div>`
+        : `<div class="grid">
           <button class="primary big" data-act="roll" data-seven="0">🎲 Rolled<span class="sub">2–6 or 8–12 · collect resources</span></button>
           <button class="danger big" data-act="roll" data-seven="1">🎲 Rolled a 7<span class="sub">discard → robber</span></button>
-        </div>
+        </div>`;
+      actions = `<div class="actions">
+        ${rollUI}
         <h3>Before rolling</h3>
-        <button data-act="knight" ${devLocked?'disabled':''} style="width:100%">⚔️ Play Knight before rolling<span class="sub">${devHint||'moves the robber first, then roll'}</span></button>
+        <button data-act="knight" ${devLocked||rolling?'disabled':''} style="width:100%">⚔️ Play Knight before rolling<span class="sub">${devHint||'moves the robber first, then roll'}</span></button>
       </div>`;
     } else {
-      what = 'Trade & build in any order';
+      what = t.roll ? `Rolled ${t.roll.d1+t.roll.d2} · trade & build in any order` : 'Trade & build in any order';
       const btn = (id) => { const A = ACTIONS[id]; const dis = A.dev && devLocked; return `<button data-act="action" data-id="${id}" ${dis?'disabled':''}>${A.label}<span class="bonus">+${T(A.key)}s</span><span class="sub">${A.hint}</span></button>`; };
       actions = `<div class="actions">
         ${t.banner ? `<div class="banner alert" data-act="clearBanner">${esc(t.banner)} <span class="muted">(tap to dismiss)</span></div>`:''}
@@ -771,11 +851,13 @@ function renderFinished(){
   const chip = p => `<span class="chip" style="background:${colorOf(p.color).hex};color:${colorOf(p.color).fg}">${esc(p.name)}</span>`;
   const withAvg = state.players.map(p=>({p, avg: p.stats.turns ? p.stats.timeUsed/p.stats.turns : 0}));
   const byTotal = [...state.players].sort((a,b)=>b.stats.timeUsed-a.stats.timeUsed);
+  const hasRolls = state.rolls.length>0;
   const rows = byTotal.map(p=>{
     const st = p.stats, avg = st.turns ? st.timeUsed/st.turns : 0;
     return `<tr><td>${chip(p)}</td>
       <td class="num">${st.turns}</td><td class="num">${fmt(st.timeUsed)}</td><td class="num">${fmt(avg)}</td><td class="num">${fmt(st.longestTurnMs)}</td>
-      <td class="num">${st.overtimeTurns}${st.overtimeMs>0?` (${fmt(st.overtimeMs)})`:''}</td></tr>`;
+      <td class="num">${st.overtimeTurns}${st.overtimeMs>0?` (${fmt(st.overtimeMs)})`:''}</td>
+      ${hasRolls?`<td class="num">${st.sevens}</td><td class="num">${st.rolls?(st.rollSum/st.rolls).toFixed(1):'–'}</td>`:''}</tr>`;
   }).join('');
   // Awards, just for fun.
   const played = withAvg.filter(x=>x.p.stats.turns>0);
@@ -789,15 +871,55 @@ function renderFinished(){
     longest && longest.stats.longestTurnMs>0 && award('⏳','Longest single turn', longest, fmt(longest.stats.longestTurnMs)),
     overs && award('🚨','Most overtime', overs, `${overs.stats.overtimeTurns} turn${overs.stats.overtimeTurns>1?'s':''} over, ${fmt(overs.stats.overtimeMs)} total`),
     fastest && fastest!==slowest && award('⚡','Fastest player', fastest.p, `${fmt(fastest.avg)} per turn on average`),
+    ...diceAwards(award),
   ].filter(Boolean).join('');
   return `
   <h1>${w?`🏆 ${esc(w.name)} wins!`:'Game over'}</h1>
   <div class="card center"><div class="muted small">Total game time</div><div class="stat-big">${fmtLong(state.clock.elapsedMs)}</div><div class="muted small">${state.turnNumber} turns · ${state.roundNumber} rounds</div></div>
   ${awards ? `<div class="card awards">${awards}</div>` : ''}
-  <div class="card" style="overflow-x:auto"><table><tr><th>Player</th><th class="num">Turns</th><th class="num">Total</th><th class="num">Avg</th><th class="num">Longest</th><th class="num">Overtime</th></tr>${rows}</table>
+  <div class="card" style="overflow-x:auto"><table><tr><th>Player</th><th class="num">Turns</th><th class="num">Total</th><th class="num">Avg</th><th class="num">Longest</th><th class="num">Overtime</th>${hasRolls?'<th class="num">7s</th><th class="num">Avg roll</th>':''}</tr>${rows}</table>
   <p class="hint">Sorted slowest first. Total includes placement, robber moves and overtime. Avg = total ÷ turns.</p></div>
+  ${hasRolls ? renderDiceStats() : ''}
   <details><summary>Event log</summary><div class="log">${renderLogRows()}</div></details>
   <div class="footer-actions"><button class="primary big" style="width:100%" data-act="newGame">New game (same players)</button></div>`;
+}
+
+function diceAwards(award){
+  const rollers = state.players.filter(p=>p.stats.rolls>0);
+  if(!rollers.length) return [];
+  const out = [];
+  const mostSevens = rollers.reduce((a,b)=>b.stats.sevens>a.stats.sevens?b:a);
+  if(mostSevens.stats.sevens>0) out.push(award('🦹','Robber magnet (most 7s)', mostSevens, `${mostSevens.stats.sevens} of ${mostSevens.stats.rolls} rolls`));
+  const enough = rollers.filter(p=>p.stats.rolls>=3);
+  if(enough.length>1){
+    const hot = enough.reduce((a,b)=>(b.stats.rollSum/b.stats.rolls)>(a.stats.rollSum/a.stats.rolls)?b:a);
+    const cold = enough.reduce((a,b)=>(b.stats.rollSum/b.stats.rolls)<(a.stats.rollSum/a.stats.rolls)?b:a);
+    if(hot!==cold){
+      out.push(award('🔥','Highest average roll', hot, `${(hot.stats.rollSum/hot.stats.rolls).toFixed(1)} over ${hot.stats.rolls} rolls`));
+      out.push(award('🧊','Lowest average roll', cold, `${(cold.stats.rollSum/cold.stats.rolls).toFixed(1)} over ${cold.stats.rolls} rolls`));
+    }
+  }
+  return out;
+}
+// Probability of each 2d6 total, out of 36.
+const WAYS = {2:1,3:2,4:3,5:4,6:5,7:6,8:5,9:4,10:3,11:2,12:1};
+function renderDiceStats(){
+  const n = state.rolls.length;
+  const counts = {}; for(let k=2;k<=12;k++) counts[k]=0;
+  state.rolls.forEach(r=>{ counts[r.d1+r.d2]++; });
+  const max = Math.max(1, ...Object.values(counts), n*6/36);
+  const cols = Object.keys(counts).map(k=>{
+    const c = counts[k], exp = n*WAYS[k]/36;
+    return `<div class="hcol" title="${k}: rolled ${c} time${c===1?'':'s'}, expected ${exp.toFixed(1)}">
+      <div class="hval">${c||''}</div>
+      <div class="hbar"><i style="height:${(c/max*100).toFixed(1)}%"></i><b style="bottom:${(exp/max*100).toFixed(1)}%"></b></div>
+      <div class="hlab ${k==='7'?'seven':''}">${k}</div></div>`;
+  }).join('');
+  const sum = state.rolls.reduce((a,r)=>a+r.d1+r.d2,0);
+  return `<div class="card"><h2 style="margin-top:0">Dice</h2>
+    <div class="row" style="justify-content:space-between"><span class="muted small">${n} rolls · average ${(sum/n).toFixed(2)} (fair dice: 7.00)</span><span class="muted small">${counts[7]} sevens (${(counts[7]/n*100).toFixed(0)}%, expected 17%)</span></div>
+    <div class="hist">${cols}</div>
+    <p class="hint">Bars are how often each number came up. The small tick on each bar is how often fair dice would have rolled it in ${n} rolls.</p></div>`;
 }
 
 function renderLogRows(){ return state.log.map(e=>`<div><time>${fmtLong(e.t)}</time>${esc(e.text)}</div>`).join('') || '<div class="muted">Nothing yet</div>'; }
@@ -849,6 +971,7 @@ document.addEventListener('click', e=>{
   const btn = e.target.closest('[data-act]'); if(!btn) return;
   unlockAudio();
   const act = btn.dataset.act; const s = state.settings;
+  if(isRolling()) return;   // dice are in the air: nothing else may happen
   if(NAV_ACTS.has(act)){ if(now()-lastNavAt < 700) return; lastNavAt = now(); }
   switch(act){
     case 'playerAdd': { const used = s.players.map(p=>p.color); const c = COLORS.find(c=>!used.includes(c.id)) || COLORS[0]; s.players.push({name:`Player ${s.players.length+1}`, color:c.id}); if(s.players.length>=5) s.extension=true; break; }
@@ -856,6 +979,8 @@ document.addEventListener('click', e=>{
     case 'playerUp': { const i=+btn.dataset.i; [s.players[i-1],s.players[i]]=[s.players[i],s.players[i-1]]; break; }
     case 'playerShuffle': for(let i=s.players.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [s.players[i],s.players[j]]=[s.players[j],s.players[i]]; } break;
     case 'preset': if(btn.dataset.k!=='custom'){ s.preset=btn.dataset.k; s.times=timesForPreset(s.preset); } else s.preset='custom'; break;
+    case 'dice': s.dice = btn.dataset.v; break;
+    case 'rollDice': rollDice(); return;
     case 'start': startGame(); return;
     case 'plSettlement': placementSettlementDown(); return;
     case 'plRoad': placementRoadDown(); return;
@@ -905,6 +1030,8 @@ document.addEventListener('keydown', e=>{
   state = load() || freshState();
   if(state.phase==='setup' || state.phase==='finished') { state.paused=false; }
   lastTick = now();
+  if(!state.rolls) state.rolls = [];
+  if(isRolling()) finishRoll();   // page was closed mid-roll: the dice had already landed
   render();
   setInterval(tick, 200);
   if(state.phase!=='setup') keepAwake();
