@@ -1123,6 +1123,10 @@ document.addEventListener('keydown', e=>{
   render();
   setInterval(tick, 200);
   if(state.phase!=='setup') keepAwake();
+  // Offline cache when hosted (GitHub Pages). Silently skipped on file:// or where unsupported.
+  if(location.protocol==='https:' && 'serviceWorker' in navigator){
+    try{ navigator.serviceWorker.register('./sw.js').catch(()=>{}); }catch(e){}
+  }
 })();
 </script>
 </body>

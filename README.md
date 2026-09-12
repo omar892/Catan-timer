@@ -98,9 +98,22 @@ and the highest and lowest average roll.
 
 ## Hosting on GitHub Pages
 
-Settings → Pages → Source: *Deploy from a branch* → `main` / root. The page is then available at
-`https://<user>.github.io/Catan-timer/`. On iOS use Share → Add to Home Screen; on Android use the
-browser menu → Install app.
+The repo deploys itself. `.github/workflows/pages.yml` runs on every push to `main`, enables
+GitHub Pages on the first run, and publishes `index.html`, `manifest.json` and `sw.js`.
+
+1. Merge this branch into `main` (or push to `main`).
+2. Watch the **Actions** tab: the "Deploy to GitHub Pages" run takes about a minute.
+3. The app is live at **https://omar892.github.io/Catan-timer/**. Send that link to the table.
+
+If the first run fails with a permissions error, open Settings → Pages once, set Source to
+**GitHub Actions**, and re-run the workflow.
+
+Every later push to `main` redeploys automatically. Phones pick up the new version on their next
+load; a phone that loses Wi-Fi mid-game keeps working from the cached copy (`sw.js`), and the game
+in progress is saved on the phone regardless.
+
+On iOS use Share → Add to Home Screen; on Android use the browser menu → Install app. Either way you
+get a full-screen icon on the home screen.
 
 ## Development
 
