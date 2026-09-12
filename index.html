@@ -123,6 +123,11 @@ summary{cursor:pointer;font-weight:600;padding:8px 0;color:var(--accent)}
 .footer-actions{position:sticky;bottom:0;background:linear-gradient(transparent,var(--bg) 30%);padding-top:14px;margin-top:10px}
 .stat-big{font-size:28px;font-weight:800}
 /* Dice */
+.choice{display:grid;gap:8px;padding:6px 0 10px;border-bottom:1px solid var(--line)}
+.choice-card{display:flex;flex-direction:column;align-items:flex-start;gap:4px;text-align:left;border:2px solid var(--line);padding:10px 12px;width:100%}
+.choice-card.sel{border-color:var(--accent);background:rgba(224,163,60,.08)}
+.choice-card b{font-size:15px}
+.choice-card span{font-weight:400;font-size:12px;color:var(--muted);line-height:1.35}
 .seg{display:flex;gap:0;flex:0 0 auto}
 .seg button{min-height:40px;padding:8px 14px;border-radius:0;font-size:14px}
 .seg button:first-child{border-radius:10px 0 0 10px}
@@ -258,6 +263,7 @@ function defaultSettings(){
     discardLimit:7,         // more than this many cards → discard on a 7
     sound:true, vibrate:true,
     dice:'app',             // 'app' rolls in the app and tracks stats; 'physical' uses real dice
+    diceMode:'random',      // 'random' = independent unbiased rolls; 'balanced' = shuffled deck of all 36 combinations
   };
 }
 
@@ -273,6 +279,7 @@ function freshState(){
     clock:{elapsedMs:0},
     log:[], winner:null, gameStartedAt:null,
     rolls:[],               // {p, d1, d2} for every in-app roll
+    deck:null,              // remaining [d1,d2] cards when using balanced dice
   };
 }
 
@@ -465,7 +472,7 @@ function startGame(){
   const order = [...Array(n).keys()].concat([...Array(n).keys()].reverse());
   state.placement = {order, idx:0, step:'settlement'};
   state.phase = 'placement'; state.paused=false; state.clock.elapsedMs=0; state.log=[]; state.turnNumber=0; state.roundNumber=0;
-  state.gameStartedAt = now(); undoStack = [];
+  state.gameStartedAt = now(); undoStack = []; state.deck = null; state.rolls = [];
   setTimer(T('settlement'), 'Initial settlement');
   log('Game started: initial placement');
   keepAwake(); SFX.next(); commit();
@@ -520,11 +527,31 @@ function rolled(seven, fromDice=false){
 }
 
 // ---------- In-app dice ----------
-function randomDie(){
-  const a = new Uint32Array(1);
-  if(window.crypto && crypto.getRandomValues){ crypto.getRandomValues(a); return 1 + (a[0] % 6); }
-  return 1 + Math.floor(Math.random()*6);
+// Unbiased integer in [0, n): rejection sampling on the cryptographic source, so no
+// face is favoured even by a rounding error. Falls back to Math.random without crypto.
+function randomInt(n){
+  if(!(window.crypto && crypto.getRandomValues)) return Math.floor(Math.random()*n);
+  const a = new Uint32Array(1), limit = Math.floor(0x100000000 / n) * n;
+  do { crypto.getRandomValues(a); } while(a[0] >= limit);
+  return a[0] % n;
 }
+function randomDie(){ return 1 + randomInt(6); }
+// Balanced dice: a shuffled deck of all 36 face combinations, drawn without
+// replacement and reshuffled when DECK_RESHUFFLE_AT cards remain (so the last
+// few cards cannot be counted). Same idea as the Catan dice deck and Colonist's
+// balanced dice.
+const DECK_RESHUFFLE_AT = 5;
+function shuffledDeck(){
+  const d = [];
+  for(let a=1;a<=6;a++) for(let b=1;b<=6;b++) d.push([a,b]);
+  for(let i=d.length-1;i>0;i--){ const j = randomInt(i+1); [d[i],d[j]] = [d[j],d[i]]; }
+  return d;
+}
+function drawBalanced(){
+  if(!state.deck || state.deck.length <= DECK_RESHUFFLE_AT){ state.deck = shuffledDeck(); log('Dice deck reshuffled (all 36 combinations)'); }
+  return state.deck.pop();
+}
+function rollPair(){ return state.settings.diceMode==='balanced' ? drawBalanced() : [randomDie(), randomDie()]; }
 let rollAnim = null;
 let reveal = null;   // {d1,d2,sum,until} — the big number shown right after the dice land
 const REVEAL_MS = 3000;
@@ -532,7 +559,8 @@ function isRolling(){ return !!(state.turn && state.turn.roll && state.turn.roll
 function rollDice(){
   if(state.phase!=='turn' || state.turn.sub!=='preroll' || isRolling()) return;
   snapshot();
-  state.turn.roll = {d1:randomDie(), d2:randomDie(), rolling:true};
+  const [d1,d2] = rollPair();
+  state.turn.roll = {d1, d2, rolling:true};
   SFX.dice(); vibrate([30,30,30,30,30]);
   commit();
   let n = 0;
@@ -730,6 +758,10 @@ function renderSetup(){
   <div class="card">
     <div class="opt"><span>Dice<br><span class="hint">In-app dice roll with one tap, route a 7 automatically and track roll stats</span></span>
       <div class="seg"><button data-act="dice" data-v="app" class="${s.dice==='app'?'sel':''}">In-app</button><button data-act="dice" data-v="physical" class="${s.dice!=='app'?'sel':''}">Physical</button></div></div>
+    ${s.dice==='app' ? `<div class="choice">
+      <button class="choice-card ${s.diceMode!=='balanced'?'sel':''}" data-act="diceMode" data-v="random"><b>🎲 True random</b><span>Every roll is independent and comes from the phone's cryptographic random source, with no rounding bias. Exactly like real dice: 7 is 1 in 6, and streaks and droughts happen.</span></button>
+      <button class="choice-card ${s.diceMode==='balanced'?'sel':''}" data-act="diceMode" data-v="balanced"><b>🃏 Balanced deck</b><span>All 36 dice combinations are shuffled into a deck and drawn one at a time, reshuffled when 5 cards remain so nobody can count it. Over each deck every number comes up as often as probability says, so no one gets starved. This is how the Catan dice deck and Colonist's balanced dice work.</span></button>
+    </div>` : ''}
     <label class="opt"><span>5–6 player extension<br><span class="hint">Adds the special building phase after every turn</span></span><input type="checkbox" data-setting="extension" ${s.extension?'checked':''}></label>
     <label class="opt"><span>“Extra time” presses per turn<br><span class="hint">+${t.extension}s each, for long trades</span></span><input type="number" min="0" max="5" data-setting="extensionsPerTurn" value="${s.extensionsPerTurn}"></label>
     <label class="opt"><span>Enforce one development card per turn<br><span class="hint">Greys out the other dev cards once one is played (VP cards excluded)</span></span><input type="checkbox" data-setting="strictDev" ${s.strictDev?'checked':''}></label>
@@ -752,7 +784,7 @@ function renderTimingTable(){
 function renderRulesText(){
   return `<div class="small">
   <p><b>Placement.</b> Each player gets a settlement timer; once the settlement is down, the road timer is added on top (same as Colonist). Order snakes: 1→N, then N→1. After the second settlement everyone collects starting resources.</p>
-  <p><b>Dice.</b> With in-app dice, one tap rolls two dice, a 7 goes straight to the discard phase, and every roll is recorded for the end-of-game stats. With physical dice you tap “Rolled” or “Rolled a 7” instead.</p>
+  <p><b>Dice.</b> With in-app dice, one tap rolls two dice, a 7 goes straight to the discard phase, and every roll is recorded for the end-of-game stats. “True random” draws each die independently from the phone's cryptographic random source; “Balanced deck” draws from a shuffled deck of all 36 combinations (reshuffled when 5 remain) so each number appears as often as it should over every deck. With physical dice you tap “Rolled” or “Rolled a 7” instead.</p>
   <p><b>Turn.</b> A turn starts with the base time. You must roll first (a Knight may be played before rolling). After the roll, trading and building can be mixed freely; every trade, build, purchase or dev card <b>adds seconds</b> to the clock because it genuinely takes table time.</p>
   <p><b>A 7.</b> The turn clock freezes. A group discard timer runs (everyone with more than the limit discards half, rounded down). Then the roller gets a robber timer to move the robber and steal. Then the turn resumes with whatever time it had.</p>
   <p><b>Knight.</b> Same robber timer; the turn clock is paused meanwhile. One development card per turn, never one bought this turn (except VP cards, which may be revealed any time on your turn).</p>
@@ -971,7 +1003,7 @@ function renderDiceStats(){
   }).join('');
   const sum = state.rolls.reduce((a,r)=>a+r.d1+r.d2,0);
   return `<div class="card"><h2 style="margin-top:0">Dice</h2>
-    <div class="row" style="justify-content:space-between"><span class="muted small">${n} rolls · average ${(sum/n).toFixed(2)} (fair dice: 7.00)</span><span class="muted small">${counts[7]} sevens (${(counts[7]/n*100).toFixed(0)}%, expected 17%)</span></div>
+    <div class="row" style="justify-content:space-between"><span class="muted small">${n} rolls · ${state.settings.diceMode==='balanced'?'balanced deck':'true random'} · average ${(sum/n).toFixed(2)} (fair dice: 7.00)</span><span class="muted small">${counts[7]} sevens (${(counts[7]/n*100).toFixed(0)}%, expected 17%)</span></div>
     <div class="hist">${cols}</div>
     <p class="hint">Bars are how often each number came up. The small tick on each bar is how often fair dice would have rolled it in ${n} rolls.</p></div>`;
 }
@@ -1035,6 +1067,7 @@ document.addEventListener('click', e=>{
     case 'playerShuffle': for(let i=s.players.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [s.players[i],s.players[j]]=[s.players[j],s.players[i]]; } break;
     case 'preset': if(btn.dataset.k!=='custom'){ s.preset=btn.dataset.k; s.times=timesForPreset(s.preset); } else s.preset='custom'; break;
     case 'dice': s.dice = btn.dataset.v; break;
+    case 'diceMode': s.diceMode = btn.dataset.v; break;
     case 'rollDice': rollDice(); return;
     case 'start': startGame(); return;
     case 'plSettlement': placementSettlementDown(); return;

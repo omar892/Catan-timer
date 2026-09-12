@@ -133,6 +133,25 @@ const assert = (c, m) => { if (!c) { console.error('FAIL:', m); process.exitCode
 
   // In-app dice
   await click('[data-act="dice"][data-v="app"]');
+  // Dice modes: unbiased RNG and the balanced deck
+  const rng = await page.evaluate(() => {
+    const counts = [0,0,0,0,0,0]; for (let i = 0; i < 6000; i++) counts[randomDie()-1]++;
+    return counts;
+  });
+  assert(rng.every(c => c > 800 && c < 1200), 'randomDie is uniform over 1-6 (' + rng.join(',') + ')');
+  await click('[data-act="diceMode"][data-v="balanced"]');
+  s = await S();
+  assert(s.settings.diceMode === 'balanced', 'balanced deck selected in setup');
+  const deck = await page.evaluate(() => {
+    state.deck = null; state.log = [];
+    const drawn = []; for (let i = 0; i < 31; i++) drawn.push(drawBalanced().join('-'));
+    const distinct = new Set(drawn).size, left = state.deck.length;
+    drawBalanced();   // 5 remain → reshuffle happens here
+    return { distinct, left, after: state.deck.length, reshuffles: state.log.filter(e => /reshuffled/.test(e.text)).length };
+  });
+  assert(deck.distinct === 31 && deck.left === 5 && deck.after === 35 && deck.reshuffles === 2, 'balanced deck draws 31 distinct combos then reshuffles at 5 left');
+  await click('[data-act="diceMode"][data-v="random"]');
+
   await click('[data-act="start"]');
   await page.screenshot({ path: __dirname + '/out/placement.png' });
   for (let i = 0; i < 10; i++) { await click('[data-act="plSettlement"]'); await page.waitForTimeout(720); await click('[data-act="plRoad"]'); await page.waitForTimeout(720); }

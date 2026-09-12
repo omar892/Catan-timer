@@ -70,8 +70,18 @@ Setup has a **Dice** switch:
 
 - **In-app** (default): one tap rolls two dice with a short tumble animation. A 7 goes straight to the
   discard phase; anything else goes to trade & build. The roll stays on the timer card for the rest
-  of the turn. Rolls use the browser's cryptographic random source. Undo takes a roll back.
+  of the turn. Undo takes a roll back.
 - **Physical**: use real dice and tap "Rolled" or "Rolled a 7".
+
+In-app dice come in two flavours, chosen in setup:
+
+- **True random** (default): each die is drawn independently from the browser's cryptographic
+  random source using rejection sampling, so there is no rounding bias toward any face. Behaves
+  exactly like real dice, streaks included.
+- **Balanced deck**: all 36 face combinations are shuffled into a deck and drawn without
+  replacement, reshuffled when 5 cards remain so the deck cannot be counted. Over each deck every
+  total appears as often as probability dictates. This is the Catan dice deck / Colonist
+  "balanced dice" model.
 
 With in-app dice the stats screen adds a roll histogram for 2–12 with the fair-dice expectation
 marked on each bar, per-player sevens and average roll, and awards for the robber magnet (most 7s)
