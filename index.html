@@ -49,7 +49,7 @@ label.opt:last-child{border-bottom:none}
 input[type=checkbox]{width:22px;height:22px;accent-color:var(--accent)}
 .grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
 .grid .span2{grid-column:1/-1}
-@media (max-width:380px){.grid{grid-template-columns:1fr}}
+@media (max-width:330px){.grid{grid-template-columns:1fr}}
 .chips{display:flex;gap:6px;flex-wrap:wrap}
 .chip{display:inline-flex;align-items:center;gap:6px;padding:6px 10px;border-radius:999px;font-size:13px;font-weight:600;border:2px solid transparent;white-space:nowrap}
 .chip.current{border-color:#fff;box-shadow:0 0 0 2px rgba(255,255,255,.15)}
@@ -58,12 +58,13 @@ input[type=checkbox]{width:22px;height:22px;accent-color:var(--accent)}
 .topbar .info{font-size:13px;color:var(--muted)}
 .topbar button{min-height:40px;padding:8px 12px}
 /* Timer card */
-.timer{border-radius:22px;padding:18px 16px 14px;text-align:center;position:relative;overflow:hidden;
+.timer{border-radius:20px;padding:12px 14px 10px;text-align:center;position:relative;overflow:hidden;
   box-shadow:0 10px 40px rgba(0,0,0,.35);transition:background .3s}
-.timer .who{font-size:22px;font-weight:800;letter-spacing:.01em}
+.timer .who{font-size:20px;font-weight:800;letter-spacing:.01em}
 .timer .what{font-size:14px;opacity:.85;margin-top:2px;min-height:20px}
-.timer .clock{font-size:76px;font-weight:800;font-variant-numeric:tabular-nums;line-height:1.05;margin:8px 0 4px;letter-spacing:-.02em}
-@media (max-width:360px){.timer .clock{font-size:64px}}
+.timer .clockrow{display:flex;align-items:center;justify-content:center;gap:14px;margin:4px 0 2px}
+.timer .clock{font-size:62px;font-weight:800;font-variant-numeric:tabular-nums;line-height:1.05;letter-spacing:-.02em}
+@media (max-width:360px){.timer .clock{font-size:54px}}
 .timer .bar{height:10px;background:rgba(0,0,0,.25);border-radius:999px;overflow:hidden;margin:6px 0 4px}
 .timer .bar>i{display:block;height:100%;background:rgba(255,255,255,.9);border-radius:999px;transition:width .25s linear}
 .timer .meta{font-size:12px;opacity:.8;display:flex;justify-content:space-between}
@@ -78,8 +79,26 @@ input[type=checkbox]{width:22px;height:22px;accent-color:var(--accent)}
 @keyframes rise{0%{opacity:0;transform:translate(-50%,10px)}20%{opacity:1}100%{opacity:0;transform:translate(-50%,-60px)}}
 .banner{background:var(--panel2);border:1px dashed var(--line);border-radius:12px;padding:10px 12px;margin:10px 0;font-size:14px}
 .banner.alert{border-color:var(--accent);color:#ffe2ad}
-.actions{margin-top:12px}
-.actions h3{font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;margin:14px 0 6px}
+.actions{margin-top:4px}
+.actions h3{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;margin:10px 0 5px}
+/* Compact action buttons */
+button.act{display:flex;flex-direction:column;align-items:flex-start;gap:2px;text-align:left;padding:8px 10px;min-height:50px;font-size:14px;width:100%}
+button.act .l{display:flex;align-items:center;justify-content:space-between;gap:6px;width:100%}
+button.act .l .bonus{flex:0 0 auto;white-space:nowrap}
+button.act .l .t{font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+button.act .bonus{margin-left:0}
+button.act .h{font-weight:400;font-size:11px;opacity:.7;line-height:1.2;width:100%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+@media (max-height:780px){.timer{padding:8px 12px 8px}.timer .clock{font-size:46px}.timer .who{font-size:17px}.timer .what{font-size:13px;min-height:0}button.act{min-height:42px;padding:5px 10px}.actions h3{margin:6px 0 4px}.chips.scroll{padding:6px 2px 4px}.chip{padding:4px 9px;font-size:12px}}
+/* Thumb bar: the phase's main button, always at the bottom of the screen */
+.game{padding-bottom:72px}
+.thumbbar{position:fixed;left:0;right:0;bottom:0;z-index:40;padding:14px var(--pad) calc(12px + env(safe-area-inset-bottom));
+  background:linear-gradient(to top, var(--bg) 70%, rgba(15,17,21,0));pointer-events:none}
+.thumbbar .inner{max-width:640px;margin:0 auto;display:flex;gap:8px;pointer-events:auto}
+.thumbbar .inner>button{flex:1 1 0;min-height:64px;font-size:19px}
+.thumbbar .inner>button.extra{flex:0 0 118px;font-size:16px}
+.chips.scroll{flex-wrap:nowrap;overflow-x:auto;padding:10px 2px 8px;scrollbar-width:none}
+.chips.scroll::-webkit-scrollbar{display:none}
+.chips.scroll .chip{flex:0 0 auto}
 .overlay{position:fixed;inset:0;background:rgba(0,0,0,.72);display:flex;align-items:center;justify-content:center;padding:20px;z-index:50}
 .overlay .card{width:100%;max-width:520px;max-height:90vh;overflow:auto}
 table{width:100%;border-collapse:collapse;font-size:14px}
@@ -141,9 +160,9 @@ summary{cursor:pointer;font-weight:600;padding:8px 0;color:var(--accent)}
 @keyframes pop{0%{transform:scale(.4);opacity:0}100%{transform:scale(1);opacity:1}}
 @keyframes fadein{from{opacity:0}to{opacity:1}}
 @media (prefers-reduced-motion:reduce){.reveal,.reveal .bignum{animation:none}}
-.rollbadge{display:inline-flex;align-items:center;gap:10px;margin:2px auto 6px;padding:6px 14px 6px 8px;border-radius:999px;background:rgba(0,0,0,.28)}
+.rollbadge{display:inline-flex;align-items:center;gap:8px;padding:5px 12px 5px 7px;border-radius:999px;background:rgba(0,0,0,.28)}
 .rollbadge .dice{gap:6px;padding:0}
-.rollbadge .num{font-size:36px;font-weight:900;line-height:1;font-variant-numeric:tabular-nums}
+.rollbadge .num{font-size:30px;font-weight:900;line-height:1;font-variant-numeric:tabular-nums}
 .rollbadge .lbl{font-size:11px;text-transform:uppercase;letter-spacing:.08em;opacity:.8}
 .awards{display:grid;gap:12px}
 .award{display:grid;grid-template-columns:44px 1fr;gap:10px;align-items:center}
@@ -288,6 +307,10 @@ function fmtLong(ms){
   const s = Math.round(ms/1000);
   const h = Math.floor(s/3600), m = Math.floor((s%3600)/60), r = s%60;
   return h ? `${h}h ${m}m` : `${m}m ${String(r).padStart(2,'0')}s`;
+}
+function fmtClock(ms){
+  const s = Math.floor(ms/1000), h = Math.floor(s/3600), m = Math.floor((s%3600)/60), r = s%60;
+  return (h ? `${h}:${String(m).padStart(2,'0')}` : `${m}`) + ':' + String(r).padStart(2,'0');
 }
 function fmtS(sec){ return sec>=60 ? (sec%60? `${Math.floor(sec/60)}m ${sec%60}s` : `${sec/60}m`) : `${sec}s`; }
 function T(key){ return state.settings.times[key]; }
@@ -575,15 +598,15 @@ function robberDone(){
 }
 
 const ACTIONS = {
-  playerTrade:    {label:'Trade with player', hint:'only the active player may trade', key:'playerTrade'},
-  bankTrade:      {label:'Bank / harbor trade', hint:'4:1, 3:1 or 2:1', key:'bankTrade'},
-  buildRoad:      {label:'Build road', hint:'brick + lumber', key:'buildRoad'},
-  buildSettlement:{label:'Build settlement', hint:'brick + lumber + wool + grain', key:'buildSettlement'},
-  buildCity:      {label:'Build city', hint:'3 ore + 2 grain', key:'buildCity'},
+  playerTrade:    {label:'Player trade', hint:'active player only · 1 trade', key:'playerTrade'},
+  bankTrade:      {label:'Bank trade', hint:'4:1 bank · 3:1 / 2:1 harbor', key:'bankTrade'},
+  buildRoad:      {label:'Road', hint:'brick + lumber', key:'buildRoad'},
+  buildSettlement:{label:'Settlement', hint:'brick + lumber + wool + grain', key:'buildSettlement'},
+  buildCity:      {label:'City', hint:'3 ore + 2 grain', key:'buildCity'},
   devBuy:         {label:'Buy dev card', hint:'ore + wool + grain', key:'devBuy'},
   roadBuilding:   {label:'Road Building', hint:'place 2 free roads', key:'roadBuilding', dev:true},
   yearOfPlenty:   {label:'Year of Plenty', hint:'take any 2 resources', key:'yearOfPlenty', dev:true},
-  monopoly:       {label:'Monopoly', hint:'everyone hands over that resource', key:'monopoly', dev:true},
+  monopoly:       {label:'Monopoly', hint:'everyone gives you one resource type', key:'monopoly', dev:true},
 };
 function doAction(id){
   const a = ACTIONS[id]; if(!a) return;
@@ -749,89 +772,81 @@ function renderGame(){
   const s = state.settings;
   const a = actorIndex();
   const c = timerColor();
-  let who, what, actions='';
+  let who, what, body='', bar='';
   const t = state.turn;
-  const chips = renderChips();
+  const nextName = t ? player((t.player+1)%state.players.length).name : '';
 
   if(state.phase==='placement'){
     const pl = state.placement;
     const second = pl.idx >= state.players.length;
+    const nxt = pl.idx+1 < pl.order.length ? player(pl.order[pl.idx+1]).name : 'first turn';
     who = player(a).name;
     what = `${second?'Second':'First'} placement · ${pl.step==='settlement'?'place your settlement':'place your road'}`;
-    actions = `<div class="actions">
-      ${pl.step==='settlement'
-        ? `<button class="primary big" style="width:100%" data-act="plSettlement">Settlement placed ✓ <span class="bonus">+${T('road')}s for road</span></button>`
-        : `<button class="ok big" style="width:100%" data-act="plRoad">Road placed → next player</button>`}
-      ${second && pl.step==='road' ? `<div class="banner">Take one resource for each hex touching this settlement.</div>`:''}
-    </div>`;
+    body = second && pl.step==='road' ? `<div class="banner">Take one resource for each hex touching this settlement.</div>` : '';
+    bar = pl.step==='settlement'
+      ? `<button class="primary big" data-act="plSettlement">Settlement placed ✓<span class="sub">+${T('road')}s added for the road</span></button>`
+      : `<button class="ok big" data-act="plRoad">Road placed ➜<span class="sub">next: ${esc(nxt)}</span></button>`;
   }
   else if(state.phase==='discard'){
     who = 'Everyone';
     what = `${t.roll?`${t.roll.d1}+${t.roll.d2} = 7`:'7'} rolled by ${player(t.player).name} · more than ${s.discardLimit} cards? Discard half (round down)`;
-    actions = `<div class="actions"><button class="ok big" style="width:100%" data-act="discardDone">Discards done → move robber</button>
-      <p class="hint center">The turn clock is frozen at ${fmt(t.savedRemaining)} while everyone discards.</p></div>`;
+    body = `<p class="hint center">The turn clock is frozen at ${fmt(t.savedRemaining)} while everyone discards.</p>`;
+    bar = `<button class="ok big" data-act="discardDone">Discards done ➜<span class="sub">${esc(player(t.player).name)} moves the robber</span></button>`;
   }
   else if(state.phase==='robber'){
     who = player(a).name;
     what = 'Move the robber and steal one card';
-    actions = `<div class="actions"><button class="ok big" style="width:100%" data-act="robberDone">Robber placed → back to turn</button>
-      <p class="hint center">Turn clock frozen at ${fmt(Math.max(t.savedRemaining,0))}.</p></div>`;
+    body = `<p class="hint center">Turn clock frozen at ${fmt(Math.max(t.savedRemaining,0))}.</p>`;
+    bar = `<button class="ok big" data-act="robberDone">Robber placed ➜<span class="sub">back to the turn</span></button>`;
   }
   else if(state.phase==='specialBuild'){
     who = 'Everyone else';
     what = `Special building phase · all players except ${player(t.player).name} may build (no trading)`;
-    actions = `<div class="actions"><button class="ok big" style="width:100%" data-act="sbDone">Done → ${player(t.nextPlayer).name}'s turn</button></div>`;
+    bar = `<button class="ok big" data-act="sbDone">Done ➜<span class="sub">${esc(player(t.nextPlayer).name)}'s turn</span></button>`;
   }
   else if(state.phase==='turn'){
     who = player(a).name;
     const devLocked = s.strictDev && t.devPlayed;
-    const devHint = devLocked ? 'one dev card already played this turn' : '';
     if(t.sub==='preroll'){
       what = 'Roll the dice first';
       const rolling = isRolling();
       const last = state.rolls[state.rolls.length-1];
-      const rollUI = s.dice==='app'
-        ? `<div class="dicebox">
-             <div class="dice ${last||rolling?'':'empty'}" id="dice">${rolling ? diceHTML(t.roll.d1, t.roll.d2, true) : last ? diceHTML(last.d1, last.d2) : diceHTML(6, 6)}</div>
-             <button class="primary big" data-act="rollDice" ${rolling?'disabled':''} style="width:100%">${rolling?'Rolling…':'🎲 Roll the dice'}<span class="sub">${last?`last roll ${last.d1+last.d2}`:'tap to roll two dice'}</span></button>
-           </div>`
-        : `<div class="grid">
-          <button class="primary big" data-act="roll" data-seven="0">🎲 Rolled<span class="sub">2–6 or 8–12 · collect resources</span></button>
-          <button class="danger big" data-act="roll" data-seven="1">🎲 Rolled a 7<span class="sub">discard → robber</span></button>
-        </div>`;
-      actions = `<div class="actions">
-        ${rollUI}
+      body = `<div class="actions">
+        ${s.dice==='app' ? `<div class="dice ${last||rolling?'':'empty'}" id="dice">${rolling ? diceHTML(t.roll.d1, t.roll.d2, true) : last ? diceHTML(last.d1, last.d2) : diceHTML(6, 6)}</div>` : ''}
         <h3>Before rolling</h3>
-        <button data-act="knight" ${devLocked||rolling?'disabled':''} style="width:100%">⚔️ Play Knight before rolling<span class="sub">${devHint||'moves the robber first, then roll'}</span></button>
+        <button class="act" data-act="knight" ${devLocked||rolling?'disabled':''}><span class="l"><b class="t">⚔️ Play Knight before rolling</b></span><span class="h">${devLocked?'one dev card already played this turn':'moves the robber first, then roll'}</span></button>
       </div>`;
+      bar = s.dice==='app'
+        ? `<button class="primary big" data-act="rollDice" ${rolling?'disabled':''}>${rolling?'Rolling…':'🎲 Roll the dice'}<span class="sub">${last?`last roll was ${last.d1+last.d2}`:'tap to roll two dice'}</span></button>`
+        : `<button class="primary big" data-act="roll" data-seven="0">🎲 Rolled<span class="sub">not a 7</span></button>
+           <button class="danger big" data-act="roll" data-seven="1">🎲 Rolled a 7<span class="sub">discard → robber</span></button>`;
     } else {
       what = 'Trade & build in any order';
-      const btn = (id) => { const A = ACTIONS[id]; const dis = A.dev && devLocked; return `<button data-act="action" data-id="${id}" ${dis?'disabled':''}>${A.label}<span class="bonus">+${T(A.key)}s</span><span class="sub">${A.hint}</span></button>`; };
-      actions = `<div class="actions">
+      const btn = (id) => { const A = ACTIONS[id]; const dis = A.dev && devLocked; return `<button class="act" data-act="action" data-id="${id}" ${dis?'disabled':''}><span class="l"><b class="t">${A.label}</b><span class="bonus">+${T(A.key)}s</span></span><span class="h">${A.hint}</span></button>`; };
+      body = `<div class="actions">
         ${t.banner ? `<div class="banner alert" data-act="clearBanner">${esc(t.banner)} <span class="muted">(tap to dismiss)</span></div>`:''}
         <h3>Trade</h3>
         <div class="grid">${btn('playerTrade')}${btn('bankTrade')}</div>
         <h3>Build</h3>
         <div class="grid">${btn('buildRoad')}${btn('buildSettlement')}${btn('buildCity')}${btn('devBuy')}</div>
-        <h3>Play development card ${devLocked?'<span class="muted">· already played this turn</span>':''}</h3>
+        <h3>Development card ${devLocked?'<span class="muted">· one already played</span>':''}</h3>
         <div class="grid">
-          <button data-act="knight" ${devLocked?'disabled':''}>⚔️ Knight<span class="bonus">${fmtS(T('robber'))} clock</span><span class="sub">move robber & steal</span></button>
+          <button class="act" data-act="knight" ${devLocked?'disabled':''}><span class="l"><b class="t">⚔️ Knight</b><span class="bonus">${fmtS(T('robber'))} clock</span></span><span class="h">move robber & steal</span></button>
           ${btn('roadBuilding')}${btn('yearOfPlenty')}${btn('monopoly')}
-          <button data-act="vp" class="span2">🏆 Reveal Victory Point card<span class="sub">no limit, any time on your turn</span></button>
-        </div>
-        <h3>Turn</h3>
-        <div class="grid">
-          <button data-act="extra" ${t.extensionsUsed>=s.extensionsPerTurn?'disabled':''}>⏱ Extra time<span class="bonus">+${T('extension')}s</span><span class="sub">${s.extensionsPerTurn - t.extensionsUsed} left this turn</span></button>
-          <button class="ok big" data-act="endTurn">End turn ➜<span class="sub">pass the dice to ${player((t.player+1)%state.players.length).name}</span></button>
+          <button class="act span2" data-act="vp"><span class="l"><b class="t">🏆 Reveal Victory Point card</b></span><span class="h">no limit, any time on your turn</span></button>
         </div>
       </div>`;
+      const extraLeft = s.extensionsPerTurn - t.extensionsUsed;
+      bar = `<button class="big extra" data-act="extra" ${extraLeft<=0?'disabled':''}>⏱ +${T('extension')}s<span class="sub">${extraLeft} left</span></button>
+             <button class="ok big" data-act="endTurn">End turn ➜<span class="sub">next: ${esc(nextName)}</span></button>`;
     }
   }
 
   const info = state.phase==='placement' ? `Placement ${state.placement.idx+1}/${state.placement.order.length}` : `Turn ${state.turnNumber} · Round ${state.roundNumber}`;
-  return `
+  const showBadge = state.turn && state.turn.roll && !isRolling() && (state.phase==='turn' ? state.turn.sub==='main' : state.phase==='discard' || state.phase==='robber');
+  return `<div class="game">
   <div class="topbar">
-    <div class="info">${info} · ⏱ <span id="gameclock">${fmtLong(state.clock.elapsedMs)}</span></div>
+    <div class="info">${info} · ⏱ <span id="gameclock">${fmtClock(state.clock.elapsedMs)}</span></div>
     <div class="row" style="flex:0 0 auto;gap:6px">
       <button class="ghost" data-act="undo" ${undoStack.length?'':'disabled'} aria-label="Undo">↶</button>
       <button data-act="pause" id="pausebtn">${state.paused?'▶ Resume':'⏸ Pause'}</button>
@@ -841,15 +856,18 @@ function renderGame(){
   <div class="timer ${state.paused?'paused':''}" id="timer" style="background:${c.hex};color:${c.fg}">
     <div class="who">${esc(who)}</div>
     <div class="what">${esc(what)}</div>
-    <div class="clock" id="clock">${fmt(remainingMs())}</div>
+    <div class="clockrow">
+      <div class="clock" id="clock">${fmt(remainingMs())}</div>
+      ${showBadge ? `<div class="rollbadge">${diceHTML(state.turn.roll.d1, state.turn.roll.d2, false, true)}<span class="num">${state.turn.roll.d1+state.turn.roll.d2}</span></div>` : ''}
+    </div>
     <div class="bar"><i id="bar"></i></div>
     <div class="meta"><span id="tlabel">${esc(state.timer.label)}</span><span id="tstatus"></span></div>
-    ${state.turn && state.turn.roll && !isRolling() && (state.phase==='turn' ? state.turn.sub==='main' : state.phase==='discard' || state.phase==='robber')
-      ? `<div class="rollbadge">${diceHTML(state.turn.roll.d1, state.turn.roll.d2, false, true)}<span class="num">${state.turn.roll.d1+state.turn.roll.d2}</span><span class="lbl">rolled</span></div>` : ''}
     <div id="float"></div>
   </div>
-  ${actions}
-  <div class="card" style="padding:10px 12px"><div class="chips">${chips}</div></div>`;
+  <div class="chips scroll">${renderChips()}</div>
+  ${body}
+  </div>
+  <div class="thumbbar"><div class="inner">${bar}</div></div>`;
 }
 
 function renderChips(){
@@ -872,7 +890,7 @@ function updateClock(){
   timer.classList.toggle('warn', rem>0 && rem<=T('warning')*1000);
   timer.classList.toggle('paused', state.paused);
   const st = $('#tstatus'); if(st) st.textContent = state.paused ? 'PAUSED' : rem<=0 ? 'OVERTIME' : `of ${fmt(state.timer.total*1000)}`;
-  const gc = $('#gameclock'); if(gc) gc.textContent = fmtLong(state.clock.elapsedMs);
+  const gc = $('#gameclock'); if(gc) gc.textContent = fmtClock(state.clock.elapsedMs);
   const f = $('#float');
   if(f && floatMsg){
     if(now()-floatMsg.at < 1300){ if(!f.firstChild || f.firstChild.dataset.at!=String(floatMsg.at)){ f.innerHTML = `<div class="float" data-at="${floatMsg.at}">${esc(floatMsg.text)}</div>`; } }
